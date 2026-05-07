@@ -223,3 +223,61 @@ export const RotateIcon = (p: SVGProps<SVGSVGElement>) => (
     <path d="M3 21v-5h5" />
   </svg>
 );
+
+export const HomeIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <path d="M3 11l9-8 9 8" />
+    <path d="M5 10v10h14V10" />
+  </svg>
+);
+
+export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+  </svg>
+);
+
+export const StarIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg
+    {...p}
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M12 2l2.9 6.9L22 10l-5.5 4.7L18 22l-6-3.6L6 22l1.5-7.3L2 10l7.1-1.1L12 2z" />
+  </svg>
+);
+
+export const FilterIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <path d="M3 6h18" />
+    <path d="M6 12h12" />
+    <path d="M10 18h4" />
+  </svg>
+);
+
+export const SortIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <path d="M7 4v16" />
+    <path d="M3 8l4-4 4 4" />
+    <path d="M17 20V4" />
+    <path d="M21 16l-4 4-4-4" />
+  </svg>
+);
+
+export const ShoppingBagIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <path d="M6 7h12l-1.5 13a2 2 0 0 1-2 1.8H9.5A2 2 0 0 1 7.5 20L6 7z" />
+    <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+  </svg>
+);
+
+export const TagIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <path d="M3 11V4a1 1 0 0 1 1-1h7l10 10-8 8L3 11z" />
+    <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+  </svg>
+);

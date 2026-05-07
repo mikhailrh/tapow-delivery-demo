@@ -473,3 +473,36 @@ Forked from the single-tenant FowlBoys × Tapow pitch demo. Pass 1 makes the app
 ### Next pass — menu schema refactor
 
 The `MenuItem` shape ([src/data/menu.ts](src/data/menu.ts)) is FowlBoys-specific — `combo` (heat + dip + side), `heatOnly` (sandwich heat picker), `sizes` (bone-in / tenders / wings piece counts), per-piece heat upcharges, and a global `HEAT_LEVELS / DIPS / SIDES` enum. Both venues currently share this menu as a placeholder; noko-noko will need its own items. Pass 2 generalizes the menu so any venue can express its modifier groups (heat, sauce, size, doneness, custom add-on lists) without baking FowlBoys assumptions into the schema or into ItemScreen / CartScreen / VendorOrderCard rendering. Likely shape: `MenuItem.modifierGroups: ModifierGroup[]` where each group has `{ id, label, required, multi?, max?, options: { id, label, priceDelta }[] }`. ItemScreen validation, cart line snapshots, and stock toggles all need to swap their FowlBoys-shaped reads for the generic shape.
+
+---
+
+## Discovery homepage — Pass 2
+
+Tapow is WhatsApp-native: customers tap a link or scan a QR to land on this app inside WhatsApp's in-app browser. Pass 2 adds the discovery homepage at `/` so the deep links don't all go straight to a single venue's menu.
+
+### What changed
+
+- **Routing** — [src/App.tsx](src/App.tsx) now branches on `window.location.pathname`. Anything matching `/v/<slug>` mounts the existing venue tree (VenueProvider + nested contexts + perspective-aware frame + DemoControls). Anything else renders `<DiscoveryScreen />` inside a phone-variant `<PhoneFrame />` — no perspective, no orders/store/etc. providers, because discovery is purely a customer browse surface and reads cross-venue order data straight from localStorage.
+- **Venue catalog** — [src/data/venues/index.ts](src/data/venues/index.ts) gained 10 KK placeholder venues (Alu Alu Kitchen, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy KK, Kohinoor, Biru Biru Cafe, El Centro, Octoverse Coffee) plus discovery-card metadata on every venue: `cuisine`, `priceTier` (1–3), `rating`, `ratingCount`, `estimatedDeliveryMinutes` (a tuple), `deliveryFee`, `heroImage` (Unsplash with stable photo IDs), `isOpen`, optional `hasOffer`. Noko Noko was recast as an agave bar in Plaza Damansara to match Tapow's actual launch list. Only FowlBoys has a populated `menu`; the rest carry `menu: []`.
+- **[src/screens/discovery/DiscoveryScreen.tsx](src/screens/discovery/DiscoveryScreen.tsx)** — phone-frame discovery layout (top to bottom): location bar (Deliver now / Home + bell), search-bar trigger, Delivery/Pickup tabs (Pickup is visual-only), filter-chip row (Sort by, Under 30 min — actually filters, Under RM3.00, Offers — actually filters, Filters), cuisine tile row (10 emoji tiles, ordered to surface populated cuisines first; tapping toggles a filter on the list below), hero category cards (Near Me / Top Rated / Free Delivery / New on Tapow — visual only), Tapow promo banner ("Free delivery on your first order"), conditional Order Again rail, and the restaurant list. Restaurant cards show hero image with optional offer pill, name, star rating + cuisine + price tier, ETA + delivery fee. Closed venues are dimmed with a "Currently closed" overlay and pushed to the bottom of the list.
+- **Order Again rail** — reads `tapow.<slug>.orders.v1` from localStorage for every venue in `VENUES`, surfaces ones with at least one collected order, sorted by most recent. Renders as a horizontal scroll of restaurant tiles with relative-time labels ("Last ordered 2d ago"). Hidden when there are no past orders anywhere. Cross-venue is intentional: discovery is a global customer surface, not scoped to one venue.
+- **[src/screens/discovery/SearchOverlay.tsx](src/screens/discovery/SearchOverlay.tsx)** — full-screen overlay opened from the top search bar or the bottom search bar. Case-insensitive substring match against venue names, taglines, cuisines, and (for venues with menus) item names. Results are split into Restaurants and Dishes sections. Tapping any row navigates to `/v/<slug>` (full-page). Empty state shows popular searches.
+- **Bottom-floating search bar** — Uber Eats-style sticky bottom rail inside the phone frame: home + pin + centered search input + cart + profile, only the search field is wired (opens the overlay).
+- **Brand tokens on discovery** — `:root` in [src/index.css](src/index.css) holds Tapow's palette as the default (green primary, same as FowlBoys). `<VenueProvider>` overrides to the active venue's tokens on /v/<slug>; on / there's no VenueProvider so the defaults stand. Navigation between discovery and venue is full-page (`window.location.assign`), so brand transitions are clean — no SPA token-resetting logic needed.
+- **Empty-menu fallback** — [src/screens/MenuScreen.tsx](src/screens/MenuScreen.tsx) checks `venue.menu.length === 0` and renders a `ComingSoon` placeholder for every non-FowlBoys venue (back chevron, "Menu coming soon" copy, and a "Browse other restaurants" button that returns to /). FowlBoys' menu and the existing customer flow are unchanged.
+- **New icons** — [src/components/icons.tsx](src/components/icons.tsx) gained `HomeIcon`, `UserIcon`, `StarIcon` (filled), `FilterIcon`, `SortIcon`, `ShoppingBagIcon`, `TagIcon`.
+
+### Smoke test
+
+`npm run dev`, hit `/` — discovery homepage with 12 restaurants, cuisine filtering, search overlay, tappable cards. Tap FowlBoys → existing menu flow. Tap any other restaurant → "Menu coming soon" with a back link. Brand colors stay Tapow-green on discovery and switch to the venue's palette on /v/<slug>.
+
+### Out of scope for this pass (and why)
+
+- **Real menus for the new venues** — explicitly deferred until the menu schema refactor (next pass). Adding 10 FowlBoys-shaped menus would lock us into the FowlBoys schema for venues whose modifiers don't fit it (cocktails, coffee, indian thali sets).
+- **SPA navigation between discovery and venue** — full-page reload is simpler and the WhatsApp in-app browser handles it fine. Each route owns its provider tree.
+- **A real cart icon badge in the bottom search bar** — discovery has no global cart; cart is scoped per venue. Showing a count would require summing across venue carts, which doesn't match the data model.
+- **Geo / pickup / sort by** — visual scaffolding only. The brief explicitly said placeholder where needed.
+
+### Next pass
+
+Menu schema refactor (per Pass 1's "Next pass" plan). Once that lands, the 10 placeholder venues can each get their own dishes and the "Menu coming soon" gate goes away.

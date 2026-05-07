@@ -31,6 +31,14 @@ import {
 } from "../components/icons";
 
 export default function MenuScreen({ jumpTo }: { jumpTo?: string }) {
+  const venue = useVenue();
+  if (venue.menu.length === 0) {
+    return <ComingSoon venueName={venue.name} />;
+  }
+  return <MenuScreenInner jumpTo={jumpTo} />;
+}
+
+function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
   const { go } = useNav();
   const { itemCount, subtotal, addLine } = useCart();
   const { isItemAvailable } = useStock();
@@ -839,6 +847,48 @@ function CategoryDrawer({
             Dismiss
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoon({ venueName }: { venueName: string }) {
+  return (
+    <div className="relative flex-1 flex flex-col bg-white overflow-hidden">
+      <div className="flex items-center px-4 pt-4 pb-3 border-b border-gray-100">
+        <button
+          onClick={() => {
+            if (typeof window !== "undefined") window.location.assign("/");
+          }}
+          aria-label="Back to discovery"
+          className="p-1 -ml-1"
+        >
+          <BackIcon className="w-6 h-6 text-brand-ink" />
+        </button>
+        <h1 className="flex-1 text-center text-[15px] font-semibold text-brand-ink">
+          {venueName}
+        </h1>
+        <div className="w-6" />
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
+        <div className="text-[64px] mb-4" aria-hidden>
+          🛠️
+        </div>
+        <div className="text-[20px] font-extrabold text-brand-ink leading-tight">
+          Menu coming soon
+        </div>
+        <div className="text-[13.5px] text-brand-muted mt-2 leading-relaxed">
+          {venueName} is finalising their dishes on Tapow. Check back soon —
+          we're onboarding new restaurants every week.
+        </div>
+        <button
+          onClick={() => {
+            if (typeof window !== "undefined") window.location.assign("/");
+          }}
+          className="mt-7 bg-brand-ink text-white rounded-full px-6 py-2.5 font-semibold text-[14px]"
+        >
+          Browse other restaurants
+        </button>
       </div>
     </div>
   );

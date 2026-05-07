@@ -22,6 +22,7 @@ import MenuScreen from "./screens/MenuScreen";
 import WhatsAppScreen from "./screens/WhatsAppScreen";
 import VendorApp from "./screens/vendor/VendorApp";
 import ManagerApp from "./screens/manager/ManagerApp";
+import DiscoveryScreen from "./screens/discovery/DiscoveryScreen";
 
 function CustomerScreen() {
   const { screen } = useNav();
@@ -53,7 +54,6 @@ function CustomerApp() {
 
 function PerspectiveRoot() {
   const { perspective } = usePerspective();
-  // Vendor (kitchen) → tablet frame; Customer + Manager → phone frame.
   const variant = perspective === "vendor" ? "tablet" : "phone";
   return (
     <PhoneFrame variant={variant}>
@@ -68,7 +68,20 @@ function PerspectiveRoot() {
   );
 }
 
+function isVenueRoute(): boolean {
+  if (typeof window === "undefined") return false;
+  return /^\/v\/[a-z0-9-]+/i.test(window.location.pathname);
+}
+
 export default function App() {
+  if (!isVenueRoute()) {
+    return (
+      <PhoneFrame variant="phone">
+        <DiscoveryScreen />
+      </PhoneFrame>
+    );
+  }
+
   return (
     <VenueProvider>
       <PerspectiveProvider>
