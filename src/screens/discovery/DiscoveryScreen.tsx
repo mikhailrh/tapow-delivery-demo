@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   VENUE_LIST,
   type Cuisine,
@@ -123,8 +123,27 @@ function relativeTimeFrom(ts: number): string {
   return `${minutes}m ago`;
 }
 
-function navigateToVenue(slug: string) {
+const SCROLL_KEY = "tapow.discovery.scroll";
+
+function saveScroll(top: number) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(SCROLL_KEY, String(top));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readSavedScroll(): number {
+  if (typeof sessionStorage === "undefined") return 0;
+  const raw = sessionStorage.getItem(SCROLL_KEY);
+  const n = raw ? Number(raw) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+function navigateToVenue(slug: string, scrollTop: number) {
   if (typeof window === "undefined") return;
+  saveScroll(scrollTop);
   window.location.assign(`/v/${slug}`);
 }
 
@@ -133,8 +152,36 @@ export default function DiscoveryScreen() {
   const [under30, setUnder30] = useState(false);
   const [offersOnly, setOffersOnly] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const orderAgain = useMemo(() => buildOrderAgainList(), []);
+
+  useLayoutEffect(() => {
+    const saved = readSavedScroll();
+    if (saved > 0 && scrollRef.current) {
+      scrollRef.current.scrollTop = saved;
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let pending = false;
+    const onScroll = () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        saveScroll(el.scrollTop);
+      });
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const goToVenue = (slug: string) => {
+    navigateToVenue(slug, scrollRef.current?.scrollTop ?? 0);
+  };
 
   const filteredVenues = useMemo(() => {
     let list = VENUE_LIST.slice();
@@ -152,9 +199,6 @@ export default function DiscoveryScreen() {
     <div className="relative flex-1 flex flex-col bg-white overflow-hidden">
       <div className="sticky top-0 z-20 bg-white">
         <LocationBar />
-        <div className="px-4 pb-3">
-          <SearchBarTrigger onTap={() => setSearchOpen(true)} />
-        </div>
         <DeliveryPickupTabs />
         <FilterChipsRow
           under30={under30}
@@ -164,7 +208,7 @@ export default function DiscoveryScreen() {
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-32">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pb-32">
         <CuisineTileRow
           selected={cuisineFilter}
           onSelect={(c) =>
@@ -173,12 +217,15 @@ export default function DiscoveryScreen() {
         />
         <HeroCategoryRow />
         <FeaturedBanner />
-        {orderAgain.length > 0 && <OrderAgainRail entries={orderAgain} />}
+        {orderAgain.length > 0 && (
+          <OrderAgainRail entries={orderAgain} onPick={goToVenue} />
+        )}
         <RestaurantList
           venues={filteredVenues}
           totalCount={VENUE_LIST.length}
           activeFilter={cuisineFilter}
           clearFilter={() => setCuisineFilter(null)}
+          onPick={goToVenue}
         />
       </div>
 
@@ -215,20 +262,6 @@ function LocationBar() {
         <BellIcon className="w-5 h-5 text-brand-ink" />
       </button>
     </div>
-  );
-}
-
-function SearchBarTrigger({ onTap }: { onTap: () => void }) {
-  return (
-    <button
-      onClick={onTap}
-      className="w-full flex items-center gap-2.5 bg-brand-canvas rounded-full px-4 py-3 text-left"
-    >
-      <SearchIcon className="w-5 h-5 text-brand-muted" />
-      <span className="text-[14px] text-brand-muted">
-        What shall we deliver?
-      </span>
-    </button>
   );
 }
 
@@ -437,7 +470,13 @@ function FeaturedBanner() {
 /*                       Order Again rail                             */
 /* ------------------------------------------------------------------ */
 
-function OrderAgainRail({ entries }: { entries: OrderAgainEntry[] }) {
+function OrderAgainRail({
+  entries,
+  onPick,
+}: {
+  entries: OrderAgainEntry[];
+  onPick: (slug: string) => void;
+}) {
   return (
     <div className="pt-1 pb-5">
       <div className="px-4 flex items-center justify-between mb-3">
@@ -456,7 +495,7 @@ function OrderAgainRail({ entries }: { entries: OrderAgainEntry[] }) {
           {entries.map(({ venue, lastOrderedAt }) => (
             <button
               key={venue.slug}
-              onClick={() => navigateToVenue(venue.slug)}
+              onClick={() => onPick(venue.slug)}
               className="w-[180px] flex-shrink-0 text-left"
             >
               <div className="rounded-xl overflow-hidden bg-brand-canvas aspect-[4/3] mb-2">
@@ -490,11 +529,13 @@ function RestaurantList({
   totalCount,
   activeFilter,
   clearFilter,
+  onPick,
 }: {
   venues: Venue[];
   totalCount: number;
   activeFilter: Cuisine | null;
   clearFilter: () => void;
+  onPick: (slug: string) => void;
 }) {
   return (
     <div className="pt-1 pb-2">
@@ -521,7 +562,7 @@ function RestaurantList({
       ) : (
         <div className="flex flex-col gap-4 px-4">
           {venues.map((v) => (
-            <RestaurantCard key={v.slug} venue={v} />
+            <RestaurantCard key={v.slug} venue={v} onPick={onPick} />
           ))}
         </div>
       )}
@@ -529,7 +570,13 @@ function RestaurantList({
   );
 }
 
-function RestaurantCard({ venue }: { venue: Venue }) {
+function RestaurantCard({
+  venue,
+  onPick,
+}: {
+  venue: Venue;
+  onPick: (slug: string) => void;
+}) {
   const [eMin, eMax] = venue.estimatedDeliveryMinutes;
   const eta = eMin === eMax ? `${eMin} min` : `${eMin}–${eMax} min`;
   const fee =
@@ -537,7 +584,7 @@ function RestaurantCard({ venue }: { venue: Venue }) {
 
   return (
     <button
-      onClick={() => venue.isOpen && navigateToVenue(venue.slug)}
+      onClick={() => venue.isOpen && onPick(venue.slug)}
       disabled={!venue.isOpen}
       className="w-full text-left"
     >

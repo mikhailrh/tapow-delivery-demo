@@ -30,6 +30,17 @@ import {
   ChevronDownIcon,
 } from "../components/icons";
 
+function backToDiscovery() {
+  if (typeof window === "undefined") return;
+  const sameOriginReferrer =
+    document.referrer && document.referrer.startsWith(window.location.origin);
+  if (sameOriginReferrer && window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.assign("/");
+  }
+}
+
 export default function MenuScreen({ jumpTo }: { jumpTo?: string }) {
   const venue = useVenue();
   if (venue.menu.length === 0) {
@@ -451,11 +462,18 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
               transition: "background-color 180ms ease, border-color 180ms ease",
             }}
           >
-            <div className="flex items-center px-4 pt-4 pb-2 gap-3">
+            <div className="flex items-center px-4 pt-4 pb-2 gap-2">
+              <button
+                onClick={backToDiscovery}
+                aria-label="Back to all restaurants"
+                className="p-1 -ml-1"
+              >
+                <BackIcon className="w-6 h-6 text-brand-ink" />
+              </button>
               <button
                 onClick={() => setDrawerOpen(true)}
                 aria-label="Open menu categories"
-                className="p-1 -ml-1"
+                className="p-1"
               >
                 <MenuIcon className="w-6 h-6 text-brand-ink" />
               </button>
@@ -857,9 +875,7 @@ function ComingSoon({ venueName }: { venueName: string }) {
     <div className="relative flex-1 flex flex-col bg-white overflow-hidden">
       <div className="flex items-center px-4 pt-4 pb-3 border-b border-gray-100">
         <button
-          onClick={() => {
-            if (typeof window !== "undefined") window.location.assign("/");
-          }}
+          onClick={backToDiscovery}
           aria-label="Back to discovery"
           className="p-1 -ml-1"
         >
@@ -882,9 +898,7 @@ function ComingSoon({ venueName }: { venueName: string }) {
           we're onboarding new restaurants every week.
         </div>
         <button
-          onClick={() => {
-            if (typeof window !== "undefined") window.location.assign("/");
-          }}
+          onClick={backToDiscovery}
           className="mt-7 bg-brand-ink text-white rounded-full px-6 py-2.5 font-semibold text-[14px]"
         >
           Browse other restaurants
