@@ -486,7 +486,7 @@ Tapow is WhatsApp-native: customers tap a link or scan a QR to land on this app 
 
 ### Venue catalog
 
-[src/data/venues/index.ts](src/data/venues/index.ts) carries 12 venues — FowlBoys (KL, full menu), Noko Noko (recast as an agave bar in Plaza Damansara), and 10 KK placeholders (Alu Alu Kitchen, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy KK, Kohinoor, Biru Biru Cafe, El Centro, Octoverse Coffee). Each venue carries discovery-card metadata: `cuisine`, `priceTier` (1–3), `rating`, `ratingCount`, `estimatedDeliveryMinutes` tuple, `deliveryFee`, `heroImage` (Unsplash with stable photo IDs), `isOpen`, optional `hasOffer`. FowlBoys and Kohinoor have populated menus; the other 10 carry `menu: []`.
+[src/data/venues/index.ts](src/data/venues/index.ts) carries 13 venues — Goojiburg (KK smashburger spot, real menu, top-of-list at 5.0 rating), FowlBoys (KL, full menu), Noko Noko (agave bar in Plaza Damansara), and 10 KK venues (Alu Alu Kitchen, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy KK, Kohinoor, Biru Biru Cafe, El Centro, Octoverse Coffee). Each venue carries discovery-card metadata: `cuisine`, `priceTier` (1–3), `rating`, `ratingCount`, `estimatedDeliveryMinutes` tuple, `deliveryFee`, `heroImage` (Unsplash with stable photo IDs), `isOpen`, optional `hasOffer`. FowlBoys, Kohinoor, and Goojiburg have populated menus; the other 10 carry `menu: []`.
 
 ### Discovery layout
 
@@ -518,11 +518,35 @@ Reads `tapow.<slug>.orders.v1` from localStorage for every venue in `VENUES`, su
 
 ### Per-venue menus
 
-Menus live in [src/data/menus/](src/data/menus/) — one file per venue, each exporting a `MenuCategory[]` typed against the existing FowlBoys-shaped `MenuItem` schema. Today there are two: FowlBoys (under [src/data/menu.ts](src/data/menu.ts), kept there because the type definitions and `HEAT_LEVELS` / `DIPS` / `SIDES` enums are co-located) and [src/data/menus/kohinoor.ts](src/data/menus/kohinoor.ts) (32 categories, ~190 items, transcribed from foodpanda; modifiers absent because Foodpanda doesn't surface them, which the schema handles fine — items render as plain price-only entries with no required choices). Each `Venue` carries its menu through `venue.menu`; the customer flow reads from there rather than the global `MENU` import.
+Menus live in [src/data/menus/](src/data/menus/) — one file per venue, each exporting a `MenuCategory[]` typed against the existing FowlBoys-shaped `MenuItem` schema. Three are populated today:
 
-[src/screens/MenuScreen.tsx](src/screens/MenuScreen.tsx) and [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx) read the menu from `useVenue().menu`. `findMenuItem` and `CategoryDrawer` take the menu as a parameter / prop. The 9 still-empty placeholder venues fall through to the `ComingSoon` placeholder via the `venue.menu.length === 0` gate.
+- **FowlBoys** (under [src/data/menu.ts](src/data/menu.ts), kept there because the type definitions and `HEAT_LEVELS` / `DIPS` / `SIDES` enums are co-located). Combo-shaped: heat + dip + side modifiers.
+- **[src/data/menus/kohinoor.ts](src/data/menus/kohinoor.ts)** — 32 categories, ~190 items, transcribed from foodpanda. Modifiers absent because foodpanda doesn't surface them, which the schema handles fine — items render as plain price-only entries with no required choices.
+- **[src/data/menus/goojiburg.ts](src/data/menus/goojiburg.ts)** — KK smashburger spot, 3 categories, 10 items. Each burger has flat optional add-ons (beef gets 6, chicken gets 5) plus 3 combo upgrades. The "Make It A Combo · select up to 1" rule from foodpanda isn't enforceable yet because the schema is a single flat `addons: OptionalAddon[]` checkbox list with no group-level max — documented in the file header. Modifier-group schema refactor will fix it.
+
+Each `Venue` carries its menu through `venue.menu`; the customer flow reads from there rather than the global `MENU` import.
+
+[src/screens/MenuScreen.tsx](src/screens/MenuScreen.tsx) and [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx) read the menu from `useVenue().menu`. `findMenuItem` and `CategoryDrawer` take the menu as a parameter / prop. The 10 still-empty venues fall through to the `ComingSoon` placeholder via the `venue.menu.length === 0` gate.
 
 VendorStockScreen and ManagerApp's stock UI still import the static `MENU` (FowlBoys-only) — known cosmetic issue when toggling perspective on a non-FowlBoys venue. Out of scope until the menu schema refactor.
+
+### Per-item Note + If unavailable
+
+`CartLine` and `OrderLineSnapshot` carry `itemNote?: string` (free text, max 200 chars) and `unavailableAction?: "remove" | "call"` (default `"remove"`, omitted from the snapshot when default). Two new `Section`s on [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx), below the existing modifier groups: "Any requests?" textarea (placeholder: "Extra sauce, less spice, no drama.", capped at 200 chars), and "If this item is not available" select (Remove / Call me). The cart line and the vendor's order card both surface the note inline (italic) with an amber "If unavailable: call customer" hint when non-default — kitchen needs that visible at glance.
+
+### Per-venue auto-seed dispatcher
+
+[src/context/OrdersContext.tsx](src/context/OrdersContext.tsx) `buildSeedHistory(venue)` dispatches to one of three paths so the auto-seed isn't shared across venues:
+
+- `venue.menu.length === 0` → returns empty (no phantom orders on the 10 placeholder venues).
+- `venue.slug === "fowlboys"` → `buildFowlBoysSeed(venue)`, the original rich seed with hand-picked combo / heat / dip / side choices.
+- Otherwise (Kohinoor, Goojiburg) → `buildGenericSeed(venue)`, which flattens `venue.menu` into a deterministic item pool and picks 22 orders' worth of line items from it. No `combo` / `heatOnly` choices, just name + qty + price. Customer names from a shared pool; status text generic.
+
+`SEED_FLAG_SUFFIX` was bumped to `"everSeeded.v2"` so existing browsers re-seed once on next load with the corrected per-venue data, then preserve state going forward.
+
+### Per-venue search default state
+
+Tapping the search icon on MenuScreen used to show a "Search by name or description" prompt with no items visible. It now shows the full menu (grouped by category) by default and filters in place as the customer types — matches Grab's in-menu search pattern. Result count appears only when there's an active query. Placeholder copy: "Have a craving?".
 
 ### Back-to-discovery and scroll preservation
 
@@ -536,11 +560,11 @@ The discovery body scrolls inside an `overflow-y-auto` div, not the document, so
 
 ### Out of scope for this pass (and why)
 
-- **Real menus for most venues** — Kohinoor was added in a follow-up because its menu is plain price-only items that fit the existing schema cleanly. The other 9 placeholders are still on the schema-refactor critical path (cocktails need spirit/mixer choices, coffee needs milk/size/strength, etc.).
+- **Real menus for most venues** — Kohinoor and Goojiburg were added in follow-ups (Kohinoor's price-only items fit the existing schema cleanly; Goojiburg's flat add-ons fit too, modulo the missing per-group max). The other 10 placeholders are still on the schema-refactor critical path (cocktails need spirit/mixer choices, coffee needs milk/size/strength, indian thalis need spice levels, etc.).
 - **SPA navigation between discovery and venue** — full-page reload is simpler and the WhatsApp in-app browser handles it fine.
 - **A real cart icon badge on the bottom rail** — discovery has no global cart; cart is scoped per venue. Showing a count would require summing across venue carts, which doesn't match the data model.
 - **Geo / pickup / sort by chip** — visual scaffolding only. The brief explicitly said placeholder where needed.
 
 ### Next pass
 
-Menu schema refactor (per Pass 1's "Next pass" plan). Once that lands, the remaining 9 placeholder venues can each get their own dishes (cocktails, coffee, etc.) and the "Menu coming soon" gate goes away. Kohinoor is the canary that proved per-venue menus thread cleanly through MenuScreen / ItemScreen / cart on the existing schema.
+Menu schema refactor (per Pass 1's "Next pass" plan). The new shape needs **modifier groups** with required / multi / max constraints — Goojiburg already exposes the limitation (no enforced "select up to 1" on its combo group; customer can technically tick all three combo options). Once that lands, the remaining 10 placeholders can each get their own dishes (cocktails, coffee, indian-style spice picks, etc.) and the "Menu coming soon" gate goes away. Kohinoor and Goojiburg are the canaries that proved per-venue menus thread cleanly through MenuScreen / ItemScreen / cart on the existing schema.
