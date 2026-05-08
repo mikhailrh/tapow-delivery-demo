@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
   DIPS,
   HEAT_LEVELS,
-  MENU,
   SIDES,
   type DipType,
   type HeatLevel,
@@ -13,6 +12,7 @@ import {
 import { computeUnitPrice, useCart } from "../context/CartContext";
 import { useNav } from "../context/NavContext";
 import { useStock } from "../context/StockContext";
+import { useVenue } from "../context/VenueContext";
 import { formatRM } from "../lib/money";
 import { CloseIcon } from "../components/icons";
 
@@ -20,14 +20,15 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
   const { back } = useNav();
   const { addLine } = useCart();
   const { isHeatAvailable } = useStock();
+  const venue = useVenue();
 
   const item = useMemo(() => {
-    for (const cat of MENU) {
+    for (const cat of venue.menu) {
       const found = cat.items.find((i) => i.id === itemId);
       if (found) return found;
     }
     return null;
-  }, [itemId]);
+  }, [itemId, venue.menu]);
 
   const [size, setSize] = useState<SizeVariant | undefined>(
     item?.sizes ? item.sizes[0] : undefined,

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  MENU,
   type DipType,
   type HeatLevel,
+  type MenuCategory,
   type MenuItem,
   type SideType,
   type SizeVariant,
@@ -61,6 +61,7 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
   } = useStore();
   const { orders } = useOrders();
   const venue = useVenue();
+  const MENU = venue.menu;
   const [reorderToast, setReorderToast] = useState<string | null>(null);
 
   const recentCollected = useMemo(
@@ -105,7 +106,7 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
     let added = 0;
     let dropped = 0;
     for (const line of order.lines) {
-      const item = findMenuItem(line.itemId, line.itemName);
+      const item = findMenuItem(MENU, line.itemId, line.itemName);
       if (!item || !isItemAvailable(item.id)) {
         dropped += line.quantity;
         continue;
@@ -283,7 +284,7 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
                   {venue.name}
                 </h2>
                 <div className="text-[13px] text-brand-muted mt-1">
-                  {venue.address.split(",")[0].trim()} · Fried Chicken · 25–35 min
+                  {venue.address.split(",")[0].trim()} · {venue.cuisine} · {venue.estimatedDeliveryMinutes[0]}–{venue.estimatedDeliveryMinutes[1]} min
                 </div>
               </div>
 
@@ -521,6 +522,8 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
       {/* Category drawer */}
       {drawerOpen && (
         <CategoryDrawer
+          menu={MENU}
+          etaLabel={`${venue.estimatedDeliveryMinutes[0]}–${venue.estimatedDeliveryMinutes[1]} min`}
           activeCat={activeCat}
           onClose={() => setDrawerOpen(false)}
           onPick={(id) => {
@@ -616,9 +619,13 @@ function ReorderSheet({
   );
 }
 
-function findMenuItem(id: string, name: string): MenuItem | null {
+function findMenuItem(
+  menu: MenuCategory[],
+  id: string,
+  name: string,
+): MenuItem | null {
   const wantedName = name.toLowerCase();
-  for (const cat of MENU) {
+  for (const cat of menu) {
     for (const item of cat.items) {
       if (item.id === id) return item;
       if (item.name.toLowerCase() === wantedName) return item;
@@ -806,17 +813,21 @@ function SearchBody({
 }
 
 function CategoryDrawer({
+  menu,
+  etaLabel,
   activeCat,
   onClose,
   onPick,
 }: {
+  menu: MenuCategory[];
+  etaLabel: string;
   activeCat: string;
   onClose: () => void;
   onPick: (id: string) => void;
 }) {
   const totalItems = useMemo(
-    () => MENU.reduce((s, c) => s + c.items.length, 0),
-    [],
+    () => menu.reduce((s, c) => s + c.items.length, 0),
+    [menu],
   );
 
   return (
@@ -834,12 +845,12 @@ function CategoryDrawer({
           <div className="flex-1 text-center -ml-6 pointer-events-none">
             <div className="text-[17px] font-bold text-brand-ink">Menu</div>
             <div className="text-[12px] text-brand-muted">
-              {totalItems} items · 25–35 min
+              {totalItems} items · {etaLabel}
             </div>
           </div>
         </div>
         <div className="border-t border-gray-100 max-h-[60vh] overflow-y-auto">
-          {MENU.map((cat) => (
+          {menu.map((cat) => (
             <button
               key={cat.id}
               onClick={() => onPick(cat.id)}

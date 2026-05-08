@@ -1,4 +1,5 @@
 import { MENU, type MenuCategory } from "../menu";
+import { KOHINOOR_MENU } from "../menus/kohinoor";
 
 export type DayHours = {
   closed: boolean;
@@ -337,9 +338,9 @@ const KK_VENUES: Venue[] = [
   },
   {
     slug: "kohinoor",
-    name: "Kohinoor",
+    name: "Kohinoor North Indian Restaurant",
     tagline: "North-Indian classics, tandoor specials.",
-    address: "Hyatt Regency Kinabalu, Jalan Datuk Salleh Sulong, 88991 Kota Kinabalu",
+    address: "Lot 4, Anjung Perdana (The Waterfront), 88000 Kota Kinabalu",
     ssm: "KHN-007",
     brandTokens: {
       green: "#06C167",
@@ -349,18 +350,18 @@ const KK_VENUES: Venue[] = [
     },
     orderIdPrefix: "KHN",
     kitchenPrepDefaultMinutes: 30,
-    deliveryMinSubtotal: 35,
+    deliveryMinSubtotal: 10,
     hours: standardHours(),
-    menu: [],
+    menu: KOHINOOR_MENU,
     cuisine: "Indian",
-    priceTier: 3,
-    rating: 4.6,
-    ratingCount: 410,
+    priceTier: 2,
+    rating: 4.0,
+    ratingCount: 100,
     estimatedDeliveryMinutes: [30, 45],
     deliveryFee: 7,
     heroImage: IMG.indianCurry,
-    isOpen: false,
-    hasOffer: { label: "Set lunch RM38" },
+    isOpen: true,
+    hasOffer: { label: "Min order RM10" },
   },
   {
     slug: "biru-biru-cafe",
