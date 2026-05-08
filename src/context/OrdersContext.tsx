@@ -23,7 +23,7 @@ import { useVenue } from "./VenueContext";
 import type { Venue } from "../data/venues";
 
 const KEY = "orders.v1";
-const SEED_FLAG_SUFFIX = "everSeeded";
+const SEED_FLAG_SUFFIX = "everSeeded.v2";
 
 type OrdersState = {
   orders: Order[];
@@ -554,6 +554,12 @@ function makeTotals(items: ItemDef[], fulfillment: "delivery" | "pickup") {
 }
 
 function buildSeedHistory(venue: Venue): OrdersState {
+  if (venue.menu.length === 0) return empty;
+  if (venue.slug === "fowlboys") return buildFowlBoysSeed(venue);
+  return buildGenericSeed(venue);
+}
+
+function buildFowlBoysSeed(venue: Venue): OrdersState {
   const now = Date.now();
   const HOUR = 3_600_000;
   const prefix = venue.orderIdPrefix;
@@ -1126,4 +1132,352 @@ function hashName(s: string) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return h;
+}
+
+const GENERIC_NAMES = [
+  "Aisyah K.",
+  "Marcus L.",
+  "Priya S.",
+  "Daniel R.",
+  "Hafiz O.",
+  "Sara T.",
+  "Joey C.",
+  "Wei N.",
+  "Farah Z.",
+  "Kiran M.",
+  "Boon Family",
+  "Lee J.",
+];
+
+function buildGenericSeed(venue: Venue): OrdersState {
+  const now = Date.now();
+  const HOUR = 3_600_000;
+  const prefix = venue.orderIdPrefix;
+  const venueName = venue.name;
+
+  const flat: { name: string; price: number }[] = [];
+  for (const cat of venue.menu) {
+    for (const item of cat.items) {
+      flat.push({ name: item.name, price: item.price });
+    }
+  }
+  if (flat.length === 0) return empty;
+
+  const pickItems = (seed: number, count: number): ItemDef[] => {
+    const items: ItemDef[] = [];
+    const used = new Set<number>();
+    for (let i = 0; i < count; i++) {
+      let idx = (seed * 31 + i * 17 + 7) % flat.length;
+      let attempts = 0;
+      while (used.has(idx) && attempts < flat.length) {
+        idx = (idx + 1) % flat.length;
+        attempts++;
+      }
+      used.add(idx);
+      const f = flat[idx];
+      const qty = i === 0 ? 1 : i % 2 === 0 ? 1 : 2;
+      items.push({ name: f.name, qty, price: f.price });
+    }
+    return items;
+  };
+
+  type HistorySpec = {
+    minsAgo: number;
+    name: string;
+    fulfillment: "delivery" | "pickup";
+    seed: number;
+    itemCount: number;
+    status: "collected" | "rejected";
+    rejectionReason?: string;
+  };
+
+  const historyDefs: HistorySpec[] = [
+    { minsAgo: 95, name: GENERIC_NAMES[0], fulfillment: "delivery", seed: 0, itemCount: 3, status: "collected" },
+    { minsAgo: 130, name: GENERIC_NAMES[1], fulfillment: "pickup", seed: 1, itemCount: 2, status: "collected" },
+    { minsAgo: 175, name: GENERIC_NAMES[2], fulfillment: "delivery", seed: 2, itemCount: 3, status: "collected" },
+    { minsAgo: 220, name: GENERIC_NAMES[3], fulfillment: "pickup", seed: 3, itemCount: 2, status: "rejected", rejectionReason: "Out of stock" },
+    { minsAgo: 260, name: GENERIC_NAMES[4], fulfillment: "delivery", seed: 4, itemCount: 3, status: "collected" },
+    { minsAgo: 24 * 60, name: GENERIC_NAMES[5], fulfillment: "delivery", seed: 5, itemCount: 2, status: "collected" },
+    { minsAgo: 26 * 60, name: GENERIC_NAMES[6], fulfillment: "pickup", seed: 6, itemCount: 3, status: "collected" },
+    { minsAgo: 28 * 60, name: GENERIC_NAMES[7], fulfillment: "delivery", seed: 7, itemCount: 3, status: "collected" },
+    { minsAgo: 48 * 60, name: GENERIC_NAMES[8], fulfillment: "pickup", seed: 8, itemCount: 2, status: "collected" },
+    { minsAgo: 72 * 60, name: GENERIC_NAMES[9], fulfillment: "delivery", seed: 9, itemCount: 3, status: "collected" },
+  ];
+
+  type IncomingSpec = {
+    secsAgo: number;
+    name: string;
+    fulfillment: "delivery" | "pickup";
+    seed: number;
+    itemCount: number;
+    note?: string;
+  };
+
+  const incomingDefs: IncomingSpec[] = [
+    { secsAgo: 25, name: GENERIC_NAMES[6], fulfillment: "delivery", seed: 10, itemCount: 3 },
+    { secsAgo: 70, name: GENERIC_NAMES[1], fulfillment: "pickup", seed: 11, itemCount: 2 },
+    { secsAgo: 120, name: GENERIC_NAMES[0], fulfillment: "delivery", seed: 12, itemCount: 3 },
+    { secsAgo: 165, name: GENERIC_NAMES[4], fulfillment: "pickup", seed: 13, itemCount: 3, note: "Extra spicy please." },
+    { secsAgo: 230, name: GENERIC_NAMES[7], fulfillment: "delivery", seed: 14, itemCount: 2 },
+  ];
+
+  type CookingSpec = {
+    placedSecsAgo: number;
+    acceptedSecsAgo: number;
+    prepMinutes: number;
+    name: string;
+    fulfillment: "delivery" | "pickup";
+    seed: number;
+    itemCount: number;
+    note?: string;
+    driverEta?: number;
+  };
+
+  const cookingDefs: CookingSpec[] = [
+    { placedSecsAgo: 360, acceptedSecsAgo: 300, prepMinutes: 25, name: GENERIC_NAMES[3], fulfillment: "delivery", seed: 15, itemCount: 2, driverEta: 9 },
+    { placedSecsAgo: 840, acceptedSecsAgo: 780, prepMinutes: 25, name: GENERIC_NAMES[5], fulfillment: "pickup", seed: 16, itemCount: 2 },
+    { placedSecsAgo: 1320, acceptedSecsAgo: 1260, prepMinutes: 25, name: GENERIC_NAMES[2], fulfillment: "delivery", seed: 17, itemCount: 3, driverEta: 6 },
+    { placedSecsAgo: 1740, acceptedSecsAgo: 1680, prepMinutes: 25, name: GENERIC_NAMES[10], fulfillment: "pickup", seed: 18, itemCount: 3, note: "Picking up at 7pm." },
+  ];
+
+  type ReadySpec = {
+    placedSecsAgo: number;
+    acceptedSecsAgo: number;
+    readySecsAgo: number;
+    prepMinutes: number;
+    name: string;
+    fulfillment: "delivery" | "pickup";
+    seed: number;
+    itemCount: number;
+    driverEta?: number;
+  };
+
+  const readyDefs: ReadySpec[] = [
+    { placedSecsAgo: 60 * 30, acceptedSecsAgo: 60 * 29, readySecsAgo: 90, prepMinutes: 25, name: GENERIC_NAMES[8], fulfillment: "pickup", seed: 19, itemCount: 2 },
+    { placedSecsAgo: 60 * 32, acceptedSecsAgo: 60 * 31, readySecsAgo: 30, prepMinutes: 25, name: GENERIC_NAMES[9], fulfillment: "delivery", seed: 20, itemCount: 3, driverEta: 6 },
+    { placedSecsAgo: 60 * 35, acceptedSecsAgo: 60 * 34, readySecsAgo: 240, prepMinutes: 25, name: GENERIC_NAMES[11], fulfillment: "pickup", seed: 21, itemCount: 2 },
+  ];
+
+  const localAddresses = [`Near ${venue.address.split(",")[1]?.trim() ?? venue.address}`];
+
+  type Built = { placedAt: number; build: (shortId: string) => Order };
+  const builders: Built[] = [];
+
+  for (const def of historyDefs) {
+    const placedAt = now - def.minsAgo * 60_000;
+    const acceptedAt = placedAt + 90_000;
+    const readyAt = acceptedAt + 22 * 60_000;
+    const collectedAt = readyAt + (def.fulfillment === "delivery" ? 18 : 6) * 60_000;
+    const items = pickItems(def.seed, def.itemCount);
+    const { subtotal, service, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
+    const lines = makeLines(items);
+    const driverLegs = seedDriverLegs(def.fulfillment);
+    builders.push({
+      placedAt,
+      build: (shortId) => {
+        if (def.status === "rejected") {
+          return {
+            id: `${prefix}-${shortId}`,
+            shortId,
+            customerName: def.name,
+            customerPhone: fakePhone(),
+            fulfillment: def.fulfillment,
+            address: def.fulfillment === "delivery" ? localAddresses[0] : undefined,
+            lines,
+            subtotal,
+            serviceCharge: service,
+            sst,
+            deliveryFee,
+            total,
+            status: "rejected",
+            placedAt,
+            rejectedAt: placedAt + 60_000,
+            rejectionReason: def.rejectionReason ?? "Out of stock",
+            refundCredit: 5,
+            ...driverLegs,
+            statusUpdates: [
+              { at: placedAt, text: "Order received." },
+              {
+                at: placedAt + 60_000,
+                text: `Cancelled by ${venueName} (${(def.rejectionReason ?? "out of stock").toLowerCase()}). Refunded.`,
+              },
+            ],
+          };
+        }
+        return {
+          id: `${prefix}-${shortId}`,
+          shortId,
+          customerName: def.name,
+          customerPhone: fakePhone(),
+          fulfillment: def.fulfillment,
+          address: def.fulfillment === "delivery" ? localAddresses[0] : undefined,
+          lines,
+          subtotal,
+          serviceCharge: service,
+          sst,
+          deliveryFee,
+          total,
+          status: "collected",
+          placedAt,
+          acceptedAt,
+          prepMinutes: 25,
+          readyAt,
+          collectedAt,
+          ...driverLegs,
+          driver:
+            def.fulfillment === "delivery"
+              ? {
+                  ...DRIVER_BY_INDEX[Math.abs(hashName(def.name)) % 4],
+                  etaMinutes: 0,
+                  assignedAt: acceptedAt,
+                }
+              : undefined,
+          statusUpdates: [
+            { at: placedAt, text: "Order received." },
+            { at: acceptedAt, text: "Cooking now." },
+            { at: readyAt, text: "Ready." },
+            { at: collectedAt, text: "Collected." },
+          ],
+        };
+      },
+    });
+  }
+
+  for (const def of incomingDefs) {
+    const placedAt = now - def.secsAgo * 1000;
+    const items = pickItems(def.seed, def.itemCount);
+    const { subtotal, service, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
+    const lines = makeLines(items);
+    const driverLegs = seedDriverLegs(def.fulfillment);
+    builders.push({
+      placedAt,
+      build: (shortId) => ({
+        id: `${prefix}-${shortId}`,
+        shortId,
+        customerName: def.name,
+        customerPhone: fakePhone(),
+        fulfillment: def.fulfillment,
+        address: def.fulfillment === "delivery" ? localAddresses[0] : undefined,
+        lines,
+        note: def.note,
+        subtotal,
+        serviceCharge: service,
+        sst,
+        deliveryFee,
+        total,
+        status: "incoming",
+        placedAt,
+        ...driverLegs,
+        statusUpdates: [
+          {
+            at: placedAt,
+            text: `Order received — waiting for ${venueName} to confirm.`,
+          },
+        ],
+      }),
+    });
+  }
+
+  for (const def of cookingDefs) {
+    const placedAt = now - def.placedSecsAgo * 1000;
+    const acceptedAt = now - def.acceptedSecsAgo * 1000;
+    const items = pickItems(def.seed, def.itemCount);
+    const { subtotal, service, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
+    const lines = makeLines(items);
+    const driverLegs = seedDriverLegs(def.fulfillment);
+    builders.push({
+      placedAt,
+      build: (shortId) => ({
+        id: `${prefix}-${shortId}`,
+        shortId,
+        customerName: def.name,
+        customerPhone: fakePhone(),
+        fulfillment: def.fulfillment,
+        address: def.fulfillment === "delivery" ? localAddresses[0] : undefined,
+        lines,
+        note: def.note,
+        subtotal,
+        serviceCharge: service,
+        sst,
+        deliveryFee,
+        total,
+        status: "cooking",
+        placedAt,
+        acceptedAt,
+        prepMinutes: def.prepMinutes,
+        ...driverLegs,
+        driver:
+          def.fulfillment === "delivery"
+            ? {
+                ...DRIVER_BY_INDEX[Math.abs(hashName(def.name)) % 4],
+                etaMinutes: def.driverEta ?? 8,
+                assignedAt: acceptedAt,
+              }
+            : undefined,
+        statusUpdates: [
+          { at: placedAt, text: "Order received." },
+          { at: acceptedAt, text: `Cooking now — ready in ~${def.prepMinutes} min.` },
+        ],
+      }),
+    });
+  }
+
+  for (const def of readyDefs) {
+    const placedAt = now - def.placedSecsAgo * 1000;
+    const acceptedAt = now - def.acceptedSecsAgo * 1000;
+    const readyAt = now - def.readySecsAgo * 1000;
+    const items = pickItems(def.seed, def.itemCount);
+    const { subtotal, service, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
+    const lines = makeLines(items);
+    const driverLegs = seedDriverLegs(def.fulfillment);
+    builders.push({
+      placedAt,
+      build: (shortId) => ({
+        id: `${prefix}-${shortId}`,
+        shortId,
+        customerName: def.name,
+        customerPhone: fakePhone(),
+        fulfillment: def.fulfillment,
+        address: def.fulfillment === "delivery" ? localAddresses[0] : undefined,
+        lines,
+        subtotal,
+        serviceCharge: service,
+        sst,
+        deliveryFee,
+        total,
+        status: "ready",
+        placedAt,
+        acceptedAt,
+        prepMinutes: def.prepMinutes,
+        readyAt,
+        ...driverLegs,
+        driver:
+          def.fulfillment === "delivery"
+            ? {
+                ...DRIVER_BY_INDEX[Math.abs(hashName(def.name)) % 4],
+                etaMinutes: def.driverEta ?? 6,
+                assignedAt: acceptedAt,
+              }
+            : undefined,
+        statusUpdates: [
+          { at: placedAt, text: "Order received." },
+          { at: acceptedAt, text: `Cooking now — ready in ~${def.prepMinutes} min.` },
+          {
+            at: readyAt,
+            text:
+              def.fulfillment === "delivery"
+                ? "Your order is ready and out for delivery."
+                : "Your order is ready! Come collect it at the counter.",
+          },
+        ],
+      }),
+    });
+  }
+
+  builders.sort((a, b) => a.placedAt - b.placedAt);
+  const orders = builders.map((b, i) => b.build(String(i + 1).padStart(3, "0")));
+
+  const cutoff = now - 7 * 24 * HOUR;
+  const filtered = orders.filter((o) => o.placedAt >= cutoff);
+  return { orders: filtered, nextOrderNum: filtered.length + 1 };
 }
