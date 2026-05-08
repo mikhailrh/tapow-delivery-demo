@@ -4,7 +4,6 @@ import {
   type Cuisine,
   type Venue,
 } from "../../data/venues";
-import type { Order } from "../../lib/orders";
 import { formatRM } from "../../lib/money";
 import {
   BellIcon,
@@ -21,25 +20,12 @@ import {
   UserIcon,
 } from "../../components/icons";
 import SearchOverlay from "./SearchOverlay";
-
-type CuisineTile = {
-  cuisine: Cuisine;
-  emoji: string;
-  label: string;
-};
-
-const CUISINE_TILES: CuisineTile[] = [
-  { cuisine: "Western", emoji: "🥩", label: "Western" },
-  { cuisine: "Seafood", emoji: "🦐", label: "Seafood" },
-  { cuisine: "Asian", emoji: "🍜", label: "Asian" },
-  { cuisine: "Cafe", emoji: "☕", label: "Cafe" },
-  { cuisine: "Italian", emoji: "🍝", label: "Italian" },
-  { cuisine: "Bar", emoji: "🍹", label: "Bar" },
-  { cuisine: "Chinese", emoji: "🥡", label: "Chinese" },
-  { cuisine: "Indian", emoji: "🍛", label: "Indian" },
-  { cuisine: "Malaysian", emoji: "🍲", label: "Malaysian" },
-  { cuisine: "Japanese", emoji: "🍣", label: "Japanese" },
-];
+import {
+  CUISINE_TILES,
+  buildOrderAgainList,
+  relativeTimeFrom,
+  type OrderAgainEntry,
+} from "./shared";
 
 type HeroCategory = {
   id: string;
@@ -79,49 +65,6 @@ const HERO_CATEGORIES: HeroCategory[] = [
     bg: "bg-violet-50",
   },
 ];
-
-type OrderAgainEntry = {
-  venue: Venue;
-  lastOrderedAt: number;
-};
-
-function loadCollectedOrdersForSlug(slug: string): Order[] {
-  if (typeof localStorage === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(`tapow.${slug}.orders.v1`);
-    if (!raw) return [];
-    const data = JSON.parse(raw) as { orders?: Order[] };
-    return (data.orders ?? []).filter((o) => o.status === "collected");
-  } catch {
-    return [];
-  }
-}
-
-function buildOrderAgainList(): OrderAgainEntry[] {
-  const entries: OrderAgainEntry[] = [];
-  for (const venue of VENUE_LIST) {
-    const collected = loadCollectedOrdersForSlug(venue.slug);
-    if (collected.length === 0) continue;
-    const lastOrderedAt = collected.reduce(
-      (m, o) => Math.max(m, o.collectedAt ?? o.placedAt),
-      0,
-    );
-    entries.push({ venue, lastOrderedAt });
-  }
-  entries.sort((a, b) => b.lastOrderedAt - a.lastOrderedAt);
-  return entries;
-}
-
-function relativeTimeFrom(ts: number): string {
-  const ms = Date.now() - ts;
-  const days = Math.floor(ms / 86400000);
-  if (days >= 7) return `${Math.floor(days / 7)}w ago`;
-  if (days >= 1) return `${days}d ago`;
-  const hours = Math.floor(ms / 3600000);
-  if (hours >= 1) return `${hours}h ago`;
-  const minutes = Math.max(1, Math.floor(ms / 60000));
-  return `${minutes}m ago`;
-}
 
 const SCROLL_KEY = "tapow.discovery.scroll";
 
@@ -216,7 +159,6 @@ export default function DiscoveryScreen() {
           }
         />
         <HeroCategoryRow />
-        <FeaturedBanner />
         {orderAgain.length > 0 && (
           <OrderAgainRail entries={orderAgain} onPick={goToVenue} />
         )}
@@ -231,7 +173,16 @@ export default function DiscoveryScreen() {
 
       <BottomBar onSearchTap={() => setSearchOpen(true)} />
 
-      {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} />}
+      {searchOpen && (
+        <SearchOverlay
+          onClose={() => setSearchOpen(false)}
+          onSelectCuisine={(c) => {
+            setCuisineFilter(c);
+            setSearchOpen(false);
+            scrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -418,49 +369,6 @@ function HeroCategoryRow() {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*                       Featured banner                              */
-/* ------------------------------------------------------------------ */
-
-function FeaturedBanner() {
-  return (
-    <div className="px-4 pt-2 pb-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[18px] font-extrabold text-brand-ink">
-          Order Now
-        </h2>
-        <button
-          aria-label="More"
-          className="w-7 h-7 rounded-full bg-brand-canvas flex items-center justify-center"
-        >
-          <ChevronRightIcon className="w-4 h-4 text-brand-ink" />
-        </button>
-      </div>
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-brand-green to-emerald-700 text-white p-5 min-h-[140px] flex flex-col justify-between">
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wide opacity-80">
-            New customer
-          </div>
-          <div className="text-[22px] font-extrabold leading-tight mt-1">
-            Free delivery on
-            <br />
-            your first order
-          </div>
-        </div>
-        <div className="text-[12px] font-semibold opacity-90">
-          No code needed · Min RM25
-        </div>
-        <div
-          className="absolute right-4 bottom-3 text-[64px] opacity-25"
-          aria-hidden
-        >
-          🛵
-        </div>
       </div>
     </div>
   );

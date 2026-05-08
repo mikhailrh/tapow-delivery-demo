@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { VENUE_LIST, type Venue } from "../../data/venues";
+import {
+  VENUE_LIST,
+  type Cuisine,
+  type Venue,
+} from "../../data/venues";
 import {
   BackIcon,
   CloseIcon,
   SearchIcon,
   StarIcon,
 } from "../../components/icons";
+import {
+  CUISINE_TILES,
+  buildOrderAgainList,
+  type OrderAgainEntry,
+} from "./shared";
 
 type DishHit = {
   kind: "dish";
@@ -22,9 +31,13 @@ type VenueHit = {
 
 type Hit = VenueHit | DishHit;
 
-const RECENT_SEARCHES = ["Fried chicken", "Pasta", "Sushi", "Coffee"];
-
-export default function SearchOverlay({ onClose }: { onClose: () => void }) {
+export default function SearchOverlay({
+  onClose,
+  onSelectCuisine,
+}: {
+  onClose: () => void;
+  onSelectCuisine: (c: Cuisine) => void;
+}) {
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -39,6 +52,8 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const orderAgain = useMemo(() => buildOrderAgainList(), []);
 
   const hits = useMemo<Hit[]>(() => {
     const needle = q.trim().toLowerCase();
@@ -79,7 +94,7 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="absolute inset-0 z-50 bg-white flex flex-col">
-      <div className="px-3 pt-4 pb-3 border-b border-gray-100 flex items-center gap-2">
+      <div className="px-3 pt-4 pb-3 flex items-center gap-2">
         <button
           onClick={onClose}
           aria-label="Close search"
@@ -93,7 +108,7 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search restaurants and dishes"
+            placeholder="Search Tapow"
             className="flex-1 bg-transparent outline-none text-[14px] text-brand-ink placeholder:text-brand-muted"
           />
           {q && (
@@ -110,7 +125,11 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
 
       <div className="flex-1 overflow-y-auto">
         {q.trim().length === 0 ? (
-          <Empty />
+          <BrowseLanding
+            orderAgain={orderAgain}
+            onPickVenue={goVenue}
+            onPickCuisine={onSelectCuisine}
+          />
         ) : hits.length === 0 ? (
           <NoResults q={q} />
         ) : (
@@ -144,24 +163,77 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
   );
 }
 
-function Empty() {
+function BrowseLanding({
+  orderAgain,
+  onPickVenue,
+  onPickCuisine,
+}: {
+  orderAgain: OrderAgainEntry[];
+  onPickVenue: (slug: string) => void;
+  onPickCuisine: (c: Cuisine) => void;
+}) {
   return (
-    <div className="px-4 pt-5">
-      <div className="text-[12px] font-bold text-brand-muted uppercase tracking-wide mb-2">
-        Popular searches
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {RECENT_SEARCHES.map((r) => (
-          <span
-            key={r}
-            className="px-3.5 py-1.5 rounded-full bg-brand-canvas text-[13px] text-brand-ink font-medium"
-          >
-            {r}
-          </span>
-        ))}
-      </div>
-      <div className="mt-8 text-center text-[13px] text-brand-muted">
-        Start typing to search across {VENUE_LIST.length} restaurants.
+    <div className="pb-8">
+      {orderAgain.length > 0 && (
+        <div className="pt-4">
+          <h3 className="px-4 text-[15px] font-bold text-brand-muted mb-3">
+            Order again
+          </h3>
+          <div className="overflow-x-auto scrollbar-none">
+            <div className="flex items-start gap-4 px-4 w-max">
+              {orderAgain.map(({ venue }) => (
+                <button
+                  key={venue.slug}
+                  onClick={() => onPickVenue(venue.slug)}
+                  className="w-[88px] flex-shrink-0 text-center"
+                >
+                  <div className="w-[80px] h-[80px] mx-auto rounded-full overflow-hidden bg-brand-canvas mb-2">
+                    <img
+                      src={venue.heroImage}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="text-[12.5px] font-bold text-brand-ink leading-tight truncate">
+                    {venue.name}
+                  </div>
+                  <div className="text-[11px] text-brand-muted mt-0.5">
+                    {venue.estimatedDeliveryMinutes[0]} min
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={orderAgain.length > 0 ? "pt-7" : "pt-4"}>
+        <h3 className="px-4 text-[15px] font-bold text-brand-muted mb-1">
+          Top categories
+        </h3>
+        <div className="px-4">
+          {CUISINE_TILES.map((tile, i) => (
+            <button
+              key={tile.cuisine}
+              onClick={() => onPickCuisine(tile.cuisine)}
+              className={
+                "w-full flex items-center gap-4 py-3.5 text-left " +
+                (i > 0 ? "border-t border-gray-100" : "")
+              }
+            >
+              <span
+                className="w-9 h-9 rounded-md bg-brand-canvas flex items-center justify-center text-[20px]"
+                aria-hidden
+              >
+                {tile.emoji}
+              </span>
+              <span className="text-[15px] font-bold text-brand-ink flex-1">
+                {tile.label}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
