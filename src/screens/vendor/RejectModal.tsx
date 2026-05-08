@@ -107,9 +107,9 @@ export default function RejectModal({
                       <div className="text-[14px] font-semibold text-brand-ink">
                         {l.quantity}× {l.itemName}
                       </div>
-                      {(l.size || l.heat) && (
+                      {l.modifierLabels.length > 0 && (
                         <div className="text-[11.5px] text-brand-muted">
-                          {[l.size, l.heat].filter(Boolean).join(" · ")}
+                          {l.modifierLabels.join(" · ")}
                         </div>
                       )}
                     </div>

@@ -174,9 +174,7 @@ export default function VendorOrderCard({
               {l.quantity}× {l.itemName}
             </div>
             <div className="text-brand-muted text-[12px]">
-              {[l.size, l.heat, l.dip, l.side, ...l.addons]
-                .filter(Boolean)
-                .join(" · ")}
+              {l.modifierLabels.join(" · ")}
             </div>
             {l.itemNote && (
               <div className="text-[12px] italic text-yellow-900 bg-yellow-50 border border-yellow-200 rounded px-2 py-1 mt-1">

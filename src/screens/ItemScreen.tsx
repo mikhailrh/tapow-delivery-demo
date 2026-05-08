@@ -1,17 +1,9 @@
 import { useMemo, useState } from "react";
-import {
-  DIPS,
-  HEAT_LEVELS,
-  SIDES,
-  type DipType,
-  type HeatLevel,
-  type OptionalAddon,
-  type SideType,
-  type SizeVariant,
-} from "../data/menu";
+import type { ModifierGroup } from "../data/menu";
 import {
   computeUnitPrice,
   useCart,
+  type Selections,
   type UnavailableAction,
 } from "../context/CartContext";
 import { useNav } from "../context/NavContext";
@@ -20,10 +12,23 @@ import { useVenue } from "../context/VenueContext";
 import { formatRM } from "../lib/money";
 import { ChevronDownIcon, CloseIcon } from "../components/icons";
 
+function defaultSelections(groups: ModifierGroup[] | undefined): Selections {
+  const out: Selections = {};
+  if (!groups) return out;
+  for (const g of groups) {
+    if (!g.multi && g.required && g.options[0]) {
+      out[g.id] = [g.options[0].id];
+    } else {
+      out[g.id] = [];
+    }
+  }
+  return out;
+}
+
 export default function ItemScreen({ itemId }: { itemId: string }) {
   const { back } = useNav();
   const { addLine } = useCart();
-  const { isHeatAvailable } = useStock();
+  const { isItemAvailable } = useStock();
   const venue = useVenue();
 
   const item = useMemo(() => {
@@ -34,13 +39,9 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
     return null;
   }, [itemId, venue.menu]);
 
-  const [size, setSize] = useState<SizeVariant | undefined>(
-    item?.sizes ? item.sizes[0] : undefined,
+  const [selections, setSelections] = useState<Selections>(() =>
+    defaultSelections(item?.modifierGroups),
   );
-  const [heat, setHeat] = useState<HeatLevel | undefined>(undefined);
-  const [dip, setDip] = useState<DipType | undefined>(undefined);
-  const [side, setSide] = useState<SideType | undefined>(undefined);
-  const [addons, setAddons] = useState<OptionalAddon[]>([]);
   const [itemNote, setItemNote] = useState("");
   const [unavailableAction, setUnavailableAction] =
     useState<UnavailableAction>("remove");
@@ -57,36 +58,48 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
     );
   }
 
-  const pieces = size?.pieces ?? 1;
-  const heatMeta = heat ? HEAT_LEVELS.find((h) => h.label === heat) : undefined;
-  const heatUpcharge = heatMeta?.upcharge ?? 0;
+  const unitPrice = computeUnitPrice(item, selections);
+  const itemAvailable = isItemAvailable(item.id);
 
-  const unitPrice = computeUnitPrice(item, size, heatUpcharge, pieces, addons);
+  const groupValid = (g: ModifierGroup): boolean => {
+    const sel = selections[g.id] ?? [];
+    if (g.required && sel.length === 0) return false;
+    if (g.multi && g.max != null && sel.length > g.max) return false;
+    return true;
+  };
+  const allValid = (item.modifierGroups ?? []).every(groupValid);
+  const canAdd = allValid && itemAvailable;
 
-  const toggleAddon = (a: OptionalAddon) => {
-    setAddons((prev) =>
-      prev.some((x) => x.id === a.id)
-        ? prev.filter((x) => x.id !== a.id)
-        : [...prev, a],
-    );
+  const setSingle = (groupId: string, optionId: string) => {
+    setSelections((prev) => ({ ...prev, [groupId]: [optionId] }));
   };
 
-  // Validation
-  const comboComplete = !item.combo || (!!heat && !!dip && !!side);
-  const heatOnlyComplete = !item.heatOnly || !!heat;
-  const canAdd = comboComplete && heatOnlyComplete;
+  const toggleMulti = (group: ModifierGroup, optionId: string) => {
+    setSelections((prev) => {
+      const cur = prev[group.id] ?? [];
+      const has = cur.includes(optionId);
+      let next: string[];
+      if (has) {
+        next = cur.filter((x) => x !== optionId);
+      } else {
+        if (group.max != null && cur.length >= group.max) {
+          // Replace the oldest selection when at max — feels closer to a
+          // "select up to N" dropdown than refusing the click.
+          next = [...cur.slice(1), optionId];
+        } else {
+          next = [...cur, optionId];
+        }
+      }
+      return { ...prev, [group.id]: next };
+    });
+  };
 
   const onAdd = () => {
     if (!canAdd) return;
     const trimmedNote = itemNote.trim();
     addLine({
       item,
-      size,
-      heat,
-      heatUpcharge,
-      dip,
-      side,
-      addons,
+      selections,
       unitPrice,
       quantity: qty,
       ...(trimmedNote ? { itemNote: trimmedNote } : {}),
@@ -97,7 +110,6 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
 
   return (
     <div className="relative flex-1 flex flex-col bg-white overflow-hidden">
-      {/* Floating close button — sits over the hero image when present, over white otherwise */}
       <button
         onClick={back}
         aria-label="Close"
@@ -106,7 +118,6 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
         <CloseIcon className="w-5 h-5 text-brand-ink" />
       </button>
 
-      {/* Body */}
       <div className="flex-1 overflow-y-auto pb-36">
         {item.image && (
           <div className="w-full aspect-[4/3] bg-brand-canvas">
@@ -122,7 +133,7 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
             {item.name}
           </h1>
           <div className="text-brand-ink text-[17px] mt-1">
-            {formatRM(item.sizes ? item.sizes[0].price : item.price)}
+            {formatRM(item.price)}
           </div>
           {item.description && (
             <p className="text-brand-muted text-[14px] mt-2 leading-relaxed">
@@ -131,100 +142,16 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
           )}
         </div>
 
-        {/* Size selector */}
-        {item.sizes && item.sizes.length > 1 && (
-          <Section title="Pick a size" required>
-            {item.sizes.map((s) => (
-              <OptionRow
-                key={s.id}
-                type="radio"
-                label={s.label}
-                price={
-                  s.price !== (item.sizes?.[0].price ?? 0)
-                    ? `+${formatRM(s.price - (item.sizes?.[0].price ?? 0))}`
-                    : formatRM(s.price)
-                }
-                checked={size?.id === s.id}
-                onChange={() => setSize(s)}
-              />
-            ))}
-          </Section>
-        )}
+        {(item.modifierGroups ?? []).map((group) => (
+          <ModifierGroupSection
+            key={group.id}
+            group={group}
+            selections={selections[group.id] ?? []}
+            onPickSingle={(optId) => setSingle(group.id, optId)}
+            onToggleMulti={(optId) => toggleMulti(group, optId)}
+          />
+        ))}
 
-        {/* Fried chicken: Heat */}
-        {(item.combo || item.heatOnly) && (
-          <Section title="Heat" required>
-            {HEAT_LEVELS.map((h) => {
-              const available = isHeatAvailable(h.label);
-              return (
-                <OptionRow
-                  key={h.label}
-                  type="radio"
-                  label={available ? h.label : `${h.label} · sold out`}
-                  price={
-                    h.upcharge > 0
-                      ? `+${formatRM(h.upcharge)} per piece`
-                      : undefined
-                  }
-                  checked={heat === h.label}
-                  disabled={!available}
-                  onChange={() => available && setHeat(h.label)}
-                />
-              );
-            })}
-          </Section>
-        )}
-
-        {/* Fried chicken: Dip */}
-        {item.combo && (
-          <Section title="Dip" required>
-            {DIPS.map((d) => (
-              <OptionRow
-                key={d}
-                type="radio"
-                label={d}
-                checked={dip === d}
-                onChange={() => setDip(d)}
-              />
-            ))}
-          </Section>
-        )}
-
-        {/* Fried chicken: Side */}
-        {item.combo && (
-          <Section title="Pick 1 side" required>
-            {SIDES.map((s) => (
-              <OptionRow
-                key={s}
-                type="radio"
-                label={s}
-                checked={side === s}
-                onChange={() => setSide(s)}
-              />
-            ))}
-            <div className="py-3 px-1 text-[13px] text-brand-muted">
-              Biscuit included ✓
-            </div>
-          </Section>
-        )}
-
-        {/* Optional addons */}
-        {item.addons && item.addons.length > 0 && (
-          <Section title="Add extras" subtitle="Optional">
-            {item.addons.map((a) => (
-              <OptionRow
-                key={a.id}
-                type="checkbox"
-                label={a.label}
-                price={`+${formatRM(a.price)}`}
-                checked={addons.some((x) => x.id === a.id)}
-                onChange={() => toggleAddon(a)}
-              />
-            ))}
-          </Section>
-        )}
-
-        {/* Note to restaurant */}
         <Section title="Any requests?" optional>
           <div className="py-3">
             <textarea
@@ -237,7 +164,6 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
           </div>
         </Section>
 
-        {/* If unavailable */}
         <Section title="If this item is not available" compact>
           <div className="py-3">
             <div className="relative">
@@ -256,7 +182,6 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
           </div>
         </Section>
 
-        {/* Quantity stepper */}
         <div className="px-5 pt-6 flex items-center justify-center gap-5">
           <button
             onClick={() => setQty((q) => Math.max(1, q - 1))}
@@ -278,7 +203,6 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
         </div>
       </div>
 
-      {/* Sticky add-to-cart */}
       <div className="absolute bottom-0 left-0 right-0 p-3 bg-white border-t border-gray-100">
         <button
           disabled={!canAdd}
@@ -290,12 +214,59 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
               : "bg-gray-200 text-gray-400 cursor-not-allowed")
           }
         >
-          {canAdd
-            ? `Add ${qty} to cart · ${formatRM(unitPrice * qty)}`
-            : "Make your selections"}
+          {!itemAvailable
+            ? "Currently unavailable"
+            : canAdd
+              ? `Add ${qty} to cart · ${formatRM(unitPrice * qty)}`
+              : "Make your selections"}
         </button>
       </div>
     </div>
+  );
+}
+
+function ModifierGroupSection({
+  group,
+  selections,
+  onPickSingle,
+  onToggleMulti,
+}: {
+  group: ModifierGroup;
+  selections: string[];
+  onPickSingle: (optionId: string) => void;
+  onToggleMulti: (optionId: string) => void;
+}) {
+  const isMulti = !!group.multi;
+  const subtitle = isMulti && group.max != null ? `Select up to ${group.max}` : undefined;
+  return (
+    <Section
+      title={group.label}
+      subtitle={subtitle}
+      required={group.required}
+      optional={!group.required}
+    >
+      {group.options.map((opt) => {
+        const checked = selections.includes(opt.id);
+        const priceText =
+          opt.priceDelta && opt.priceDelta > 0
+            ? opt.perPiece
+              ? `+${formatRM(opt.priceDelta)} per piece`
+              : `+${formatRM(opt.priceDelta)}`
+            : undefined;
+        return (
+          <OptionRow
+            key={opt.id}
+            type={isMulti ? "checkbox" : "radio"}
+            label={opt.label}
+            price={priceText}
+            checked={checked}
+            onChange={() =>
+              isMulti ? onToggleMulti(opt.id) : onPickSingle(opt.id)
+            }
+          />
+        );
+      })}
+    </Section>
   );
 }
 
@@ -314,6 +285,7 @@ function Section({
   compact?: boolean;
   children: React.ReactNode;
 }) {
+  const showOptional = optional && !required;
   return (
     <section className={compact ? "mt-3" : "mt-6"}>
       <div className="px-5 pb-2 flex items-center justify-between">
@@ -328,7 +300,7 @@ function Section({
             Required
           </span>
         )}
-        {optional && (
+        {showOptional && (
           <span className="text-[11px] font-semibold text-brand-muted bg-gray-100 rounded-full px-2.5 py-0.5">
             Optional
           </span>
@@ -366,7 +338,8 @@ function OptionRow({
       <div className="flex-1">
         <div
           className={
-            "text-[15px] " + (disabled ? "text-brand-muted line-through" : "text-brand-ink")
+            "text-[15px] " +
+            (disabled ? "text-brand-muted line-through" : "text-brand-ink")
           }
         >
           {label}

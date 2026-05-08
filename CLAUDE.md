@@ -518,31 +518,62 @@ Reads `tapow.<slug>.orders.v1` from localStorage for every venue in `VENUES`, su
 
 ### Per-venue menus
 
-Menus live in [src/data/menus/](src/data/menus/) — one file per venue, each exporting a `MenuCategory[]` typed against the existing FowlBoys-shaped `MenuItem` schema. Three are populated today:
+Menus live in [src/data/menus/](src/data/menus/) — one file per venue, each exporting a `MenuCategory[]`. Three are populated today:
 
-- **FowlBoys** (under [src/data/menu.ts](src/data/menu.ts), kept there because the type definitions and `HEAT_LEVELS` / `DIPS` / `SIDES` enums are co-located). Combo-shaped: heat + dip + side modifiers.
-- **[src/data/menus/kohinoor.ts](src/data/menus/kohinoor.ts)** — 32 categories, ~190 items, transcribed from foodpanda. Modifiers absent because foodpanda doesn't surface them, which the schema handles fine — items render as plain price-only entries with no required choices.
-- **[src/data/menus/goojiburg.ts](src/data/menus/goojiburg.ts)** — KK smashburger spot, 3 categories, 10 items. Each burger has flat optional add-ons (beef gets 6, chicken gets 5) plus 3 combo upgrades. The "Make It A Combo · select up to 1" rule from foodpanda isn't enforceable yet because the schema is a single flat `addons: OptionalAddon[]` checkbox list with no group-level max — documented in the file header. Modifier-group schema refactor will fix it.
+- **[src/data/menus/fowlboys.ts](src/data/menus/fowlboys.ts)** — combo items (Bone In, Tenders, Wings) with four required modifier groups (size, heat, dip, side). Heat options on Xtra/XX Hot tiers carry `priceDelta: 2.5` with `perPiece: true` — the size group's selected `pieces` multiply the upcharge, so 3 pieces XX Hot = +RM 7.50. heatOnly items (sandwiches) have just the heat group. Pasta and house salad have an optional add-on group.
+- **[src/data/menus/kohinoor.ts](src/data/menus/kohinoor.ts)** — 32 categories, ~190 items, transcribed from foodpanda. No modifier groups (modifiers absent in source). Items render as price-only entries.
+- **[src/data/menus/goojiburg.ts](src/data/menus/goojiburg.ts)** — KK smashburger spot, 3 categories, 10 items. Beef burgers carry a beef add-ons group (multi, max 6) + a combo group (multi, max 1). Chicken burgers carry their own add-ons group + the same combo group. The schema's `max` enforces foodpanda's "select up to 1" rule.
 
-Each `Venue` carries its menu through `venue.menu`; the customer flow reads from there rather than the global `MENU` import.
+Each `Venue` carries its menu through `venue.menu`; the customer flow reads from there rather than a static import. [src/screens/MenuScreen.tsx](src/screens/MenuScreen.tsx) and [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx) read from `useVenue().menu`; `findMenuItem` and `CategoryDrawer` take the menu as a parameter / prop. The 10 still-empty venues fall through to the `ComingSoon` placeholder via the `venue.menu.length === 0` gate.
 
-[src/screens/MenuScreen.tsx](src/screens/MenuScreen.tsx) and [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx) read the menu from `useVenue().menu`. `findMenuItem` and `CategoryDrawer` take the menu as a parameter / prop. The 10 still-empty venues fall through to the `ComingSoon` placeholder via the `venue.menu.length === 0` gate.
+### Modifier-group schema
 
-VendorStockScreen and ManagerApp's stock UI still import the static `MENU` (FowlBoys-only) — known cosmetic issue when toggling perspective on a non-FowlBoys venue. Out of scope until the menu schema refactor.
+[src/data/menu.ts](src/data/menu.ts):
 
-### Per-item Note + If unavailable
+```ts
+type ModifierOption = {
+  id: string;
+  label: string;
+  priceDelta?: number;       // added when selected (defaults to 0)
+  perPiece?: boolean;        // multiply by `pieces` from the item's "size"-kind group
+  pieces?: number;           // exposed by size-kind group options
+};
 
-`CartLine` and `OrderLineSnapshot` carry `itemNote?: string` (free text, max 200 chars) and `unavailableAction?: "remove" | "call"` (default `"remove"`, omitted from the snapshot when default). Two new `Section`s on [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx), below the existing modifier groups: "Any requests?" textarea (placeholder: "Extra sauce, less spice, no drama.", capped at 200 chars), and "If this item is not available" select (Remove / Call me). The cart line and the vendor's order card both surface the note inline (italic) with an amber "If unavailable: call customer" hint when non-default — kitchen needs that visible at glance.
+type ModifierGroup = {
+  id: string;
+  label: string;
+  required: boolean;         // customer must pick at least one option
+  multi?: boolean;           // true = checkbox; absent/false = radio
+  max?: number;              // upper bound for multi-select
+  kind?: "size";             // marks the size-shaped group for per-piece pricing
+  options: ModifierOption[];
+};
+
+type MenuItem = {
+  id, name, description?, price, badge?, image?,
+  modifierGroups?: ModifierGroup[];
+};
+```
+
+[src/context/CartContext.tsx](src/context/CartContext.tsx) holds `CartLine.selections: Record<groupId, optionIds[]>` (single-select groups carry an array of length 0 or 1 for uniformity). `computeUnitPrice(item, selections)` resolves pieces from the `kind: "size"` group and walks every selected option, summing `priceDelta` (× pieces if `perPiece`). `selectionLabels(item, selections)` returns the option labels in modifier-group order — used by cart, vendor card, receipt, and reorder.
+
+[src/lib/orders.ts](src/lib/orders.ts) `OrderLineSnapshot` carries `modifierLabels: string[]` (already-resolved display strings, in display order). Renderers join with " · ". The reorder flow in MenuScreen reconstructs `selections` from `modifierLabels` by matching label-to-option within each group — multi-select picks all matches, single-select picks the first match (or falls back to the first option if required).
+
+ItemScreen renders each modifier group generically: radio for single-select, checkbox for multi. The "select up to N" cap on multi groups bumps out the oldest selection rather than refusing the click — feels closer to a dropdown than a strict gate. Validation: required groups need at least one selection; multi-with-max can't exceed max.
+
+### Stock — items only
+
+`StockContext` was simplified: the FowlBoys-only `disabledHeats` field is gone. Now just `disabledItemIds: string[]`. VendorStockScreen and ManagerApp's stock UI both read from `useVenue().menu`, so a non-FowlBoys vendor sees their own menu's items in the stock toggles. Storage key bumped `stock.v1` → `stock.v2`.
 
 ### Per-venue auto-seed dispatcher
 
 [src/context/OrdersContext.tsx](src/context/OrdersContext.tsx) `buildSeedHistory(venue)` dispatches to one of three paths so the auto-seed isn't shared across venues:
 
 - `venue.menu.length === 0` → returns empty (no phantom orders on the 10 placeholder venues).
-- `venue.slug === "fowlboys"` → `buildFowlBoysSeed(venue)`, the original rich seed with hand-picked combo / heat / dip / side choices.
-- Otherwise (Kohinoor, Goojiburg) → `buildGenericSeed(venue)`, which flattens `venue.menu` into a deterministic item pool and picks 22 orders' worth of line items from it. No `combo` / `heatOnly` choices, just name + qty + price. Customer names from a shared pool; status text generic.
+- `venue.slug === "fowlboys"` → `buildFowlBoysSeed(venue)`, hand-picked combo / heat / dip / side data using the new modifier-label shape.
+- Otherwise (Kohinoor, Goojiburg) → `buildGenericSeed(venue)`, which flattens `venue.menu` into a deterministic item pool and picks 22 orders' worth of line items from it. No modifiers attached, just name + qty + price.
 
-`SEED_FLAG_SUFFIX` was bumped to `"everSeeded.v2"` so existing browsers re-seed once on next load with the corrected per-venue data, then preserve state going forward.
+`SEED_FLAG_SUFFIX` was bumped to `"everSeeded.v3"` so existing browsers re-seed once on next load with line snapshots in the new `modifierLabels` shape.
 
 ### Per-venue search default state
 
@@ -560,11 +591,13 @@ The discovery body scrolls inside an `overflow-y-auto` div, not the document, so
 
 ### Out of scope for this pass (and why)
 
-- **Real menus for most venues** — Kohinoor and Goojiburg were added in follow-ups (Kohinoor's price-only items fit the existing schema cleanly; Goojiburg's flat add-ons fit too, modulo the missing per-group max). The other 10 placeholders are still on the schema-refactor critical path (cocktails need spirit/mixer choices, coffee needs milk/size/strength, indian thalis need spice levels, etc.).
+- **Real menus for most venues** — Kohinoor and Goojiburg are populated; the other 10 placeholders are unblocked by the modifier-group schema but still need their data transcribed. Those are next-pass content work, not architecture.
 - **SPA navigation between discovery and venue** — full-page reload is simpler and the WhatsApp in-app browser handles it fine.
 - **A real cart icon badge on the bottom rail** — discovery has no global cart; cart is scoped per venue. Showing a count would require summing across venue carts, which doesn't match the data model.
 - **Geo / pickup / sort by chip** — visual scaffolding only. The brief explicitly said placeholder where needed.
 
 ### Next pass
 
-Menu schema refactor (per Pass 1's "Next pass" plan). The new shape needs **modifier groups** with required / multi / max constraints — Goojiburg already exposes the limitation (no enforced "select up to 1" on its combo group; customer can technically tick all three combo options). Once that lands, the remaining 10 placeholders can each get their own dishes (cocktails, coffee, indian-style spice picks, etc.) and the "Menu coming soon" gate goes away. Kohinoor and Goojiburg are the canaries that proved per-venue menus thread cleanly through MenuScreen / ItemScreen / cart on the existing schema.
+Content: transcribe menus for the remaining 10 venues (Alu Alu, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy, Biru Biru, El Centro, Octoverse, Noko Noko). The schema now supports the shapes that were blocked before (cocktails with spirit/mixer/ice picks, coffee with size/milk/strength, indian thalis with spice levels). Each venue is a new file in [src/data/menus/](src/data/menus/) plus a `menu:` wire-up in [src/data/venues/index.ts](src/data/venues/index.ts).
+
+Architecture-wise, the remaining gaps are still customer identity (cross-venue profile / order history) and the discovery-page polish noted in Pass 2.

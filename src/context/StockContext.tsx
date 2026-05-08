@@ -8,26 +8,21 @@ import {
   type ReactNode,
 } from "react";
 import { loadJSON, saveJSON, subscribeToKey } from "../lib/sync";
-import type { HeatLevel } from "../data/menu";
 
-const KEY = "stock.v1";
+const KEY = "stock.v2";
 
 export type StockState = {
   disabledItemIds: string[];
-  disabledHeats: HeatLevel[];
 };
 
 const initial: StockState = {
   disabledItemIds: [],
-  disabledHeats: [],
 };
 
 type StockContextValue = {
   state: StockState;
   isItemAvailable: (itemId: string) => boolean;
-  isHeatAvailable: (heat: HeatLevel) => boolean;
   toggleItem: (itemId: string) => void;
-  toggleHeat: (heat: HeatLevel) => void;
   bringEverythingBack: () => void;
 };
 
@@ -57,23 +52,9 @@ export function StockProvider({ children }: { children: ReactNode }) {
     (itemId: string) => {
       const exists = state.disabledItemIds.includes(itemId);
       update({
-        ...state,
         disabledItemIds: exists
           ? state.disabledItemIds.filter((x) => x !== itemId)
           : [...state.disabledItemIds, itemId],
-      });
-    },
-    [state, update],
-  );
-
-  const toggleHeat = useCallback(
-    (heat: HeatLevel) => {
-      const exists = state.disabledHeats.includes(heat);
-      update({
-        ...state,
-        disabledHeats: exists
-          ? state.disabledHeats.filter((x) => x !== heat)
-          : [...state.disabledHeats, heat],
       });
     },
     [state, update],
@@ -88,21 +69,14 @@ export function StockProvider({ children }: { children: ReactNode }) {
     [state.disabledItemIds],
   );
 
-  const isHeatAvailable = useCallback(
-    (heat: HeatLevel) => !state.disabledHeats.includes(heat),
-    [state.disabledHeats],
-  );
-
   const value = useMemo<StockContextValue>(
     () => ({
       state,
       isItemAvailable,
-      isHeatAvailable,
       toggleItem,
-      toggleHeat,
       bringEverythingBack,
     }),
-    [state, isItemAvailable, isHeatAvailable, toggleItem, toggleHeat, bringEverythingBack],
+    [state, isItemAvailable, toggleItem, bringEverythingBack],
   );
 
   return <StockContext.Provider value={value}>{children}</StockContext.Provider>;

@@ -1,39 +1,58 @@
-import type { MenuCategory, OptionalAddon } from "../menu";
+import type { MenuCategory, ModifierGroup } from "../menu";
 
 /**
  * Goojiburg (Dewan Damai, Kota Kinabalu).
  * Source: foodpanda listing captured 8 May 2026.
  *
- * Foodpanda lists three modifier groups: Beef Add Ons (max 6), Chicken Add Ons
- * (max 2), Make It A Combo (max 1). The current MenuItem schema has a single
- * flat `addons: OptionalAddon[]` checkbox list with no grouping or per-group
- * max — so we flatten add-ons + combo options together per item. Customers
- * can technically tick multiple combos (no enforced "select up to 1") until
- * the modifier-group schema lands.
+ * The new modifier-group schema enforces foodpanda's per-group max:
+ * - Beef Add Ons: multi, max 6 (more is moot — there are only 6 options)
+ * - Chicken Add On: multi, max 2
+ * - Make It A Combo: multi, max 1 — customer can pick 0 or 1 combo
  */
 
-const BEEF_ADDONS: OptionalAddon[] = [
-  { id: "gj-add-beef-smash", label: "Smashed patty", price: 9 },
-  { id: "gj-add-beef-cheese", label: "Cheese", price: 2 },
-  { id: "gj-add-beef-sunny", label: "Sunny side up", price: 3 },
-  { id: "gj-add-beef-mango", label: "Mango chutney", price: 3.5 },
-  { id: "gj-add-beef-160g", label: "160g Hamburger patty", price: 18 },
-  { id: "gj-add-beef-truffle", label: "Truffle aioli", price: 6 },
-];
+const BEEF_ADDON_GROUP: ModifierGroup = {
+  id: "beef-addons",
+  label: "Beef burger add-ons",
+  required: false,
+  multi: true,
+  max: 6,
+  options: [
+    { id: "gj-beef-smash", label: "Smashed patty", priceDelta: 9 },
+    { id: "gj-beef-cheese", label: "Cheese", priceDelta: 2 },
+    { id: "gj-beef-sunny", label: "Sunny side up", priceDelta: 3 },
+    { id: "gj-beef-mango", label: "Mango chutney", priceDelta: 3.5 },
+    { id: "gj-beef-160g", label: "160g Hamburger patty", priceDelta: 18 },
+    { id: "gj-beef-truffle", label: "Truffle aioli", priceDelta: 6 },
+  ],
+};
 
-const CHICKEN_ADDONS: OptionalAddon[] = [
-  { id: "gj-add-chk-thigh", label: "Fried chicken thigh", price: 12 },
-  { id: "gj-add-chk-cheese", label: "Cheese", price: 2 },
-  { id: "gj-add-chk-sunny", label: "Sunny side up", price: 3 },
-  { id: "gj-add-chk-mango", label: "Mango chutney", price: 3.5 },
-  { id: "gj-add-chk-truffle", label: "Truffle aioli", price: 6 },
-];
+const CHICKEN_ADDON_GROUP: ModifierGroup = {
+  id: "chicken-addons",
+  label: "Chicken burger add-ons",
+  required: false,
+  multi: true,
+  max: 2,
+  options: [
+    { id: "gj-chk-thigh", label: "Fried chicken thigh", priceDelta: 12 },
+    { id: "gj-chk-cheese", label: "Cheese", priceDelta: 2 },
+    { id: "gj-chk-sunny", label: "Sunny side up", priceDelta: 3 },
+    { id: "gj-chk-mango", label: "Mango chutney", priceDelta: 3.5 },
+    { id: "gj-chk-truffle", label: "Truffle aioli", priceDelta: 6 },
+  ],
+};
 
-const COMBO_ADDONS: OptionalAddon[] = [
-  { id: "gj-combo-coke", label: "Combo · Coke Asli + Fries", price: 10 },
-  { id: "gj-combo-water", label: "Combo · Mineral Water + Fries", price: 10 },
-  { id: "gj-combo-sparkling", label: "Combo · Sparkling Water + Fries", price: 10 },
-];
+const COMBO_GROUP: ModifierGroup = {
+  id: "combo",
+  label: "Make it a combo!",
+  required: false,
+  multi: true,
+  max: 1,
+  options: [
+    { id: "gj-combo-coke", label: "Coke Asli + Fries", priceDelta: 10 },
+    { id: "gj-combo-water", label: "Mineral Water + Fries", priceDelta: 10 },
+    { id: "gj-combo-sparkling", label: "Sparkling Water + Fries", priceDelta: 10 },
+  ],
+};
 
 const SMASH_HERO =
   "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1000&q=80&auto=format&fit=crop";
@@ -53,7 +72,7 @@ export const GOOJIBURG_MENU: MenuCategory[] = [
         price: 21,
         badge: "Popular",
         image: SMASH_HERO,
-        addons: [...BEEF_ADDONS, ...COMBO_ADDONS],
+        modifierGroups: [BEEF_ADDON_GROUP, COMBO_GROUP],
       },
       {
         id: "gj-beef-double",
@@ -63,7 +82,7 @@ export const GOOJIBURG_MENU: MenuCategory[] = [
         price: 32,
         badge: "Popular",
         image: SMASH_HERO,
-        addons: [...BEEF_ADDONS, ...COMBO_ADDONS],
+        modifierGroups: [BEEF_ADDON_GROUP, COMBO_GROUP],
       },
       {
         id: "gj-beef-oongbak",
@@ -71,7 +90,7 @@ export const GOOJIBURG_MENU: MenuCategory[] = [
         description:
           "Smashed Australian 100% beef patty, Thai basil kra pow, sabasco mayo, fried egg.",
         price: 34,
-        addons: [...BEEF_ADDONS, ...COMBO_ADDONS],
+        modifierGroups: [BEEF_ADDON_GROUP, COMBO_GROUP],
       },
       {
         id: "gj-beef-macam-atas",
@@ -79,7 +98,7 @@ export const GOOJIBURG_MENU: MenuCategory[] = [
         description:
           "160g Australian 100% beef patty, truffle mayo, cheddar, sautéed mushrooms.",
         price: 39,
-        addons: [...BEEF_ADDONS, ...COMBO_ADDONS],
+        modifierGroups: [BEEF_ADDON_GROUP, COMBO_GROUP],
       },
       {
         id: "gj-beef-spillburg",
@@ -89,7 +108,7 @@ export const GOOJIBURG_MENU: MenuCategory[] = [
         price: 32,
         badge: "Popular",
         image: SMASH_HERO,
-        addons: [...BEEF_ADDONS, ...COMBO_ADDONS],
+        modifierGroups: [BEEF_ADDON_GROUP, COMBO_GROUP],
       },
     ],
   },
@@ -105,7 +124,7 @@ export const GOOJIBURG_MENU: MenuCategory[] = [
         price: 25,
         badge: "Popular",
         image: CHICKEN_HERO,
-        addons: [...CHICKEN_ADDONS, ...COMBO_ADDONS],
+        modifierGroups: [CHICKEN_ADDON_GROUP, COMBO_GROUP],
       },
       {
         id: "gj-chk-will",
@@ -113,7 +132,7 @@ export const GOOJIBURG_MENU: MenuCategory[] = [
         description:
           "Buttermilk fried chicken, sabasco mayo, hot honey, tzatziki, pickles, lettuce.",
         price: 24,
-        addons: [...CHICKEN_ADDONS, ...COMBO_ADDONS],
+        modifierGroups: [CHICKEN_ADDON_GROUP, COMBO_GROUP],
       },
     ],
   },

@@ -35,12 +35,9 @@ function buildReceiptHtml(order: Order, profile: VenueProfile): string {
   const issuedAt = new Date(order.collectedAt ?? order.placedAt);
   const lines = order.lines
     .map((l) => {
-      const detailParts = [l.size, l.heat, l.dip, l.side, ...l.addons].filter(
-        Boolean,
-      );
       const detail =
-        detailParts.length > 0
-          ? `<div class="line-detail">${escapeHtml(detailParts.join(" · "))}</div>`
+        l.modifierLabels.length > 0
+          ? `<div class="line-detail">${escapeHtml(l.modifierLabels.join(" · "))}</div>`
           : "";
       return `
         <div class="line">

@@ -1,17 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  type DipType,
-  type HeatLevel,
   type MenuCategory,
   type MenuItem,
-  type SideType,
-  type SizeVariant,
 } from "../data/menu";
-
-type CartLineHeat = HeatLevel | undefined;
-type CartLineDip = DipType | undefined;
-type CartLineSide = SideType | undefined;
-import { useCart } from "../context/CartContext";
+import {
+  computeUnitPrice,
+  useCart,
+  type Selections,
+} from "../context/CartContext";
 import { useNav } from "../context/NavContext";
 import { useStock } from "../context/StockContext";
 import { useStore } from "../context/StoreContext";
@@ -111,15 +107,12 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
         dropped += line.quantity;
         continue;
       }
-      const size = matchSize(item, line.size);
+      const selections = reconstructSelections(item, line.modifierLabels);
+      const unitPrice = computeUnitPrice(item, selections);
       addLine({
         item,
-        size,
-        heat: line.heat as CartLineHeat,
-        dip: line.dip as CartLineDip,
-        side: line.side as CartLineSide,
-        addons: [],
-        unitPrice: line.unitPrice,
+        selections,
+        unitPrice,
         quantity: line.quantity,
       });
       added += line.quantity;
@@ -637,9 +630,34 @@ function findMenuItem(
   return null;
 }
 
-function matchSize(item: MenuItem, label?: string): SizeVariant | undefined {
-  if (!label || !item.sizes) return undefined;
-  return item.sizes.find((s) => s.label === label) ?? item.sizes[0];
+function reconstructSelections(
+  item: MenuItem,
+  modifierLabels: string[],
+): Selections {
+  const selections: Selections = {};
+  if (!item.modifierGroups) return selections;
+  for (const g of item.modifierGroups) {
+    if (g.multi) {
+      const matches: string[] = [];
+      for (const label of modifierLabels) {
+        const opt = g.options.find((o) => o.label === label);
+        if (opt && !matches.includes(opt.id)) matches.push(opt.id);
+      }
+      selections[g.id] = matches;
+    } else {
+      const found = modifierLabels
+        .map((l) => g.options.find((o) => o.label === l))
+        .find((o): o is (typeof g.options)[number] => Boolean(o));
+      if (found) {
+        selections[g.id] = [found.id];
+      } else if (g.required && g.options[0]) {
+        selections[g.id] = [g.options[0].id];
+      } else {
+        selections[g.id] = [];
+      }
+    }
+  }
+  return selections;
 }
 
 function reorderDateLabel(ts: number, now = Date.now()): string {
@@ -712,7 +730,7 @@ function ItemRow({
           }
         >
           {formatRM(item.price)}
-          {item.sizes && item.sizes.length > 1 && (
+          {item.modifierGroups?.some((g) => g.kind === "size") && (
             <span className="text-brand-muted text-[12px]"> · from</span>
           )}
         </div>

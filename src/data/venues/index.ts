@@ -1,4 +1,5 @@
-import { MENU, type MenuCategory } from "../menu";
+import type { MenuCategory } from "../menu";
+import { FOWLBOYS_MENU } from "../menus/fowlboys";
 import { KOHINOOR_MENU } from "../menus/kohinoor";
 import { GOOJIBURG_MENU } from "../menus/goojiburg";
 
@@ -138,7 +139,7 @@ export const FOWLBOYS_VENUE: Venue = {
   kitchenPrepDefaultMinutes: 25,
   deliveryMinSubtotal: 25,
   hours: standardHours(),
-  menu: MENU,
+  menu: FOWLBOYS_MENU,
   cuisine: "Western",
   priceTier: 2,
   rating: 4.7,

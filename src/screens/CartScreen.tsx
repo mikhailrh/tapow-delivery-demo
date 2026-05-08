@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
-import { useCart, type CartLine } from "../context/CartContext";
+import {
+  selectionLabels,
+  useCart,
+  type CartLine,
+} from "../context/CartContext";
 import { useNav } from "../context/NavContext";
 import { usePromos } from "../context/PromoContext";
 import { useVenue } from "../context/VenueContext";
@@ -216,13 +220,7 @@ function LineRow({
   onDec: () => void;
   onRemove: () => void;
 }) {
-  const choiceChips: string[] = [];
-  if (line.size) choiceChips.push(line.size.label);
-  if (line.heat) choiceChips.push(line.heat);
-  if (line.dip) choiceChips.push(line.dip);
-  if (line.side) choiceChips.push(line.side);
-  for (const a of line.addons) choiceChips.push(a.label);
-
+  const choiceChips = selectionLabels(line.item, line.selections);
   const lineTotal = line.unitPrice * line.quantity;
 
   return (

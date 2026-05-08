@@ -15,7 +15,7 @@ import {
   type Promo,
   type PromoType,
 } from "../../context/PromoContext";
-import { HEAT_LEVELS, MENU, type HeatLevel } from "../../data/menu";
+import type { MenuCategory } from "../../data/menu";
 import { formatRM } from "../../lib/money";
 import { elapsedLabel, type Order } from "../../lib/orders";
 import {
@@ -767,9 +767,9 @@ function ManagerOrderSheet({
                 <div className="font-semibold text-brand-ink">
                   {l.quantity}× {l.itemName}
                 </div>
-                {(l.size || l.heat) && (
+                {l.modifierLabels.length > 0 && (
                   <div className="text-brand-muted text-[11.5px]">
-                    {[l.size, l.heat, l.dip, l.side].filter(Boolean).join(" · ")}
+                    {l.modifierLabels.join(" · ")}
                   </div>
                 )}
               </div>
@@ -1019,22 +1019,24 @@ function ManagerRefundSheet({
 /* ------------------------------------------------------------------ */
 
 function StockScreen() {
-  const { state, toggleItem, toggleHeat, bringEverythingBack } = useStock();
+  const { state, toggleItem, bringEverythingBack } = useStock();
+  const venue = useVenue();
   const disabledItems = state.disabledItemIds.length;
-  const disabledHeats = state.disabledHeats.length;
   const [query, setQuery] = useState("");
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return MENU.map((cat) => ({
-      ...cat,
-      items: cat.items.filter((i) =>
-        q
-          ? `${i.name} ${i.description ?? ""}`.toLowerCase().includes(q)
-          : true,
-      ),
-    })).filter((c) => c.items.length > 0);
-  }, [query]);
+    return venue.menu
+      .map((cat) => ({
+        ...cat,
+        items: cat.items.filter((i) =>
+          q
+            ? `${i.name} ${i.description ?? ""}`.toLowerCase().includes(q)
+            : true,
+        ),
+      }))
+      .filter((c) => c.items.length > 0);
+  }, [query, venue.menu]);
 
   return (
     <div className="h-full overflow-y-auto pb-20">
@@ -1048,11 +1050,11 @@ function StockScreen() {
       <div className="mx-4 bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center justify-between mb-2">
           <div className="text-[13px] text-brand-muted">
-            {disabledItems + disabledHeats === 0
+            {disabledItems === 0
               ? "Everything's available."
-              : `${disabledItems + disabledHeats} item${disabledItems + disabledHeats === 1 ? "" : "s"} marked sold out.`}
+              : `${disabledItems} item${disabledItems === 1 ? "" : "s"} marked sold out.`}
           </div>
-          {disabledItems + disabledHeats > 0 && (
+          {disabledItems > 0 && (
             <button
               onClick={bringEverythingBack}
               className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-green"
@@ -1091,9 +1093,8 @@ function StockScreen() {
       <ManagerStockBody
         state={state}
         toggleItem={toggleItem}
-        toggleHeat={toggleHeat}
         categories={matches}
-        searching={query.trim().length > 0}
+        emptyMenu={venue.menu.length === 0}
       />
     </div>
   );
@@ -1102,60 +1103,19 @@ function StockScreen() {
 function ManagerStockBody({
   state,
   toggleItem,
-  toggleHeat,
   categories,
-  searching,
+  emptyMenu,
 }: {
   state: ReturnType<typeof useStock>["state"];
   toggleItem: (id: string) => void;
-  toggleHeat: (h: HeatLevel) => void;
-  categories: typeof MENU;
-  searching: boolean;
+  categories: MenuCategory[];
+  emptyMenu: boolean;
 }) {
   return (
     <div className="mt-3">
-      {!searching && (
-        <>
-          <div className="px-5 pb-2 text-[11px] font-extrabold text-brand-muted uppercase tracking-wide">
-            Heat tiers
-          </div>
-          <div className="bg-white border-y border-gray-100">
-            {HEAT_LEVELS.map((h) => {
-              const disabled = state.disabledHeats.includes(h.label);
-              return (
-                <button
-                  key={h.label}
-                  onClick={() => toggleHeat(h.label)}
-                  className="w-full flex items-center px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-brand-canvas/60 transition-colors text-left"
-                >
-                  <div className="flex-1">
-                    <div
-                      className={
-                        "text-[14px] font-semibold " +
-                        (disabled
-                          ? "text-brand-muted line-through"
-                          : "text-brand-ink")
-                      }
-                    >
-                      {h.label}
-                    </div>
-                    {h.upcharge > 0 && (
-                      <div className="text-[11px] text-brand-muted">
-                        +RM{h.upcharge.toFixed(2)} per piece
-                      </div>
-                    )}
-                  </div>
-                  <Switch on={!disabled} />
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
-
       {categories.length === 0 && (
         <div className="px-5 pt-12 text-center text-brand-muted text-[14px]">
-          No items match.
+          {emptyMenu ? "No menu yet." : "No items match."}
         </div>
       )}
 

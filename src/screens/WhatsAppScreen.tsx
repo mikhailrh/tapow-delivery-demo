@@ -145,11 +145,9 @@ export default function WhatsAppScreen({
                     {formatRM(s.unitPrice * s.quantity)}
                   </span>
                 </div>
-                {(s.size || s.heat || s.dip || s.side || s.addons.length > 0) && (
+                {s.modifierLabels.length > 0 && (
                   <div className="text-brand-muted text-[11.5px] leading-snug mt-0.5 pl-2">
-                    {[s.size, s.heat, s.dip, s.side, ...s.addons]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {s.modifierLabels.join(" · ")}
                   </div>
                 )}
               </div>

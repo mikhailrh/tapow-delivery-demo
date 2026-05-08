@@ -95,11 +95,9 @@ export default function VendorOrderDetailScreen({
                 <div className="font-semibold text-brand-ink">
                   {l.quantity}× {l.itemName}
                 </div>
-                {(l.size || l.heat || l.dip || l.side || l.addons.length > 0) && (
+                {l.modifierLabels.length > 0 && (
                   <div className="text-brand-muted text-[12px]">
-                    {[l.size, l.heat, l.dip, l.side, ...l.addons]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {l.modifierLabels.join(" · ")}
                   </div>
                 )}
               </div>

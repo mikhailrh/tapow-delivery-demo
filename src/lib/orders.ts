@@ -1,4 +1,4 @@
-import type { CartLine } from "../context/CartContext";
+import { selectionLabels, type CartLine } from "../context/CartContext";
 
 export type OrderStatus =
   | "incoming"
@@ -11,11 +11,8 @@ export type OrderStatus =
 export type OrderLineSnapshot = {
   itemId: string;
   itemName: string;
-  size?: string;
-  heat?: string;
-  dip?: string;
-  side?: string;
-  addons: string[];
+  /** Resolved option labels, in modifier-group order. Empty for items with no modifiers. */
+  modifierLabels: string[];
   quantity: number;
   unitPrice: number;
   /** Per-item note from the customer (free text). */
@@ -97,11 +94,7 @@ export function snapshotLines(lines: CartLine[]): OrderLineSnapshot[] {
   return lines.map((l) => ({
     itemId: l.item.id,
     itemName: l.item.name,
-    size: l.size?.label,
-    heat: l.heat,
-    dip: l.dip,
-    side: l.side,
-    addons: l.addons.map((a) => a.label),
+    modifierLabels: selectionLabels(l.item, l.selections),
     quantity: l.quantity,
     unitPrice: l.unitPrice,
     ...(l.itemNote ? { itemNote: l.itemNote } : {}),

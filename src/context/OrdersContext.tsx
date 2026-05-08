@@ -23,7 +23,7 @@ import { useVenue } from "./VenueContext";
 import type { Venue } from "../data/venues";
 
 const KEY = "orders.v1";
-const SEED_FLAG_SUFFIX = "everSeeded.v2";
+const SEED_FLAG_SUFFIX = "everSeeded.v3";
 
 type OrdersState = {
   orders: Order[];
@@ -527,13 +527,9 @@ function makeLines(items: ItemDef[]) {
   return items.map((i) => ({
     itemId: i.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
     itemName: i.name,
-    addons: [] as string[],
+    modifierLabels: (i.choices ?? []).filter(Boolean),
     quantity: i.qty,
     unitPrice: i.price,
-    ...(i.choices?.[0] ? { size: i.choices[0] } : {}),
-    ...(i.choices?.[1] ? { heat: i.choices[1] } : {}),
-    ...(i.choices?.[2] ? { dip: i.choices[2] } : {}),
-    ...(i.choices?.[3] ? { side: i.choices[3] } : {}),
   }));
 }
 
