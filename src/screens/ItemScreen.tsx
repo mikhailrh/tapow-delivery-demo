@@ -9,12 +9,16 @@ import {
   type SideType,
   type SizeVariant,
 } from "../data/menu";
-import { computeUnitPrice, useCart } from "../context/CartContext";
+import {
+  computeUnitPrice,
+  useCart,
+  type UnavailableAction,
+} from "../context/CartContext";
 import { useNav } from "../context/NavContext";
 import { useStock } from "../context/StockContext";
 import { useVenue } from "../context/VenueContext";
 import { formatRM } from "../lib/money";
-import { CloseIcon } from "../components/icons";
+import { ChevronDownIcon, CloseIcon } from "../components/icons";
 
 export default function ItemScreen({ itemId }: { itemId: string }) {
   const { back } = useNav();
@@ -37,6 +41,9 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
   const [dip, setDip] = useState<DipType | undefined>(undefined);
   const [side, setSide] = useState<SideType | undefined>(undefined);
   const [addons, setAddons] = useState<OptionalAddon[]>([]);
+  const [itemNote, setItemNote] = useState("");
+  const [unavailableAction, setUnavailableAction] =
+    useState<UnavailableAction>("remove");
   const [qty, setQty] = useState(1);
 
   if (!item) {
@@ -71,6 +78,7 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
 
   const onAdd = () => {
     if (!canAdd) return;
+    const trimmedNote = itemNote.trim();
     addLine({
       item,
       size,
@@ -81,6 +89,8 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
       addons,
       unitPrice,
       quantity: qty,
+      ...(trimmedNote ? { itemNote: trimmedNote } : {}),
+      ...(unavailableAction !== "remove" ? { unavailableAction } : {}),
     });
     back();
   };
@@ -214,6 +224,38 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
           </Section>
         )}
 
+        {/* Note to restaurant */}
+        <Section title="Note to restaurant" optional>
+          <div className="py-3">
+            <textarea
+              value={itemNote}
+              onChange={(e) => setItemNote(e.target.value)}
+              placeholder="Add your request (subject to restaurant's discretion)"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-brand-ink placeholder:text-brand-muted resize-none outline-none focus:border-brand-ink min-h-[88px]"
+              maxLength={200}
+            />
+          </div>
+        </Section>
+
+        {/* If unavailable */}
+        <Section title="If this item is not available">
+          <div className="py-3">
+            <div className="relative">
+              <select
+                value={unavailableAction}
+                onChange={(e) =>
+                  setUnavailableAction(e.target.value as UnavailableAction)
+                }
+                className="w-full appearance-none border border-gray-200 rounded-xl px-4 py-3 pr-10 text-[14px] text-brand-ink bg-white outline-none focus:border-brand-ink cursor-pointer"
+              >
+                <option value="remove">Remove it from my order</option>
+                <option value="call">Call me</option>
+              </select>
+              <ChevronDownIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted pointer-events-none" />
+            </div>
+          </div>
+        </Section>
+
         {/* Quantity stepper */}
         <div className="px-5 pt-6 flex items-center justify-center gap-5">
           <button
@@ -261,11 +303,13 @@ function Section({
   title,
   subtitle,
   required,
+  optional,
   children,
 }: {
   title: string;
   subtitle?: string;
   required?: boolean;
+  optional?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -278,8 +322,13 @@ function Section({
           )}
         </div>
         {required && (
-          <span className="text-[11px] font-semibold text-brand-muted bg-gray-100 rounded px-2 py-0.5">
+          <span className="text-[11px] font-semibold text-brand-muted bg-gray-100 rounded-full px-2.5 py-0.5">
             Required
+          </span>
+        )}
+        {optional && (
+          <span className="text-[11px] font-semibold text-brand-muted bg-gray-100 rounded-full px-2.5 py-0.5">
+            Optional
           </span>
         )}
       </div>

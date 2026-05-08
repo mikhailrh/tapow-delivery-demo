@@ -178,6 +178,16 @@ export default function VendorOrderCard({
                 .filter(Boolean)
                 .join(" · ")}
             </div>
+            {l.itemNote && (
+              <div className="text-[12px] italic text-yellow-900 bg-yellow-50 border border-yellow-200 rounded px-2 py-1 mt-1">
+                Note: "{l.itemNote}"
+              </div>
+            )}
+            {l.unavailableAction === "call" && (
+              <div className="text-[11.5px] text-amber-700 mt-0.5">
+                If unavailable: call customer
+              </div>
+            )}
           </li>
         ))}
       </ul>

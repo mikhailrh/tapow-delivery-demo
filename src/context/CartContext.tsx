@@ -15,6 +15,8 @@ import type {
   SizeVariant,
 } from "../data/menu";
 
+export type UnavailableAction = "remove" | "call";
+
 export type CartLine = {
   /** Unique line id — composite of item + choices + random — lets two variants of the same item coexist. */
   lineId: string;
@@ -28,6 +30,10 @@ export type CartLine = {
   quantity: number;
   /** Unit price snapshot — item base + size diff + heat upcharge × pieces + addons. */
   unitPrice: number;
+  /** Per-item note from the customer (free text, optional). */
+  itemNote?: string;
+  /** What the kitchen should do if this item is sold out. Defaults to "remove". */
+  unavailableAction?: UnavailableAction;
 };
 
 type CartContextValue = {

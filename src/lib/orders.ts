@@ -18,6 +18,10 @@ export type OrderLineSnapshot = {
   addons: string[];
   quantity: number;
   unitPrice: number;
+  /** Per-item note from the customer (free text). */
+  itemNote?: string;
+  /** What the kitchen should do if this item is sold out. */
+  unavailableAction?: "remove" | "call";
 };
 
 export type StatusUpdate = {
@@ -100,6 +104,10 @@ export function snapshotLines(lines: CartLine[]): OrderLineSnapshot[] {
     addons: l.addons.map((a) => a.label),
     quantity: l.quantity,
     unitPrice: l.unitPrice,
+    ...(l.itemNote ? { itemNote: l.itemNote } : {}),
+    ...(l.unavailableAction && l.unavailableAction !== "remove"
+      ? { unavailableAction: l.unavailableAction }
+      : {}),
   }));
 }
 

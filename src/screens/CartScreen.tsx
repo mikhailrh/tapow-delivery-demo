@@ -236,6 +236,16 @@ function LineRow({
             {choiceChips.join(" · ")}
           </div>
         )}
+        {line.itemNote && (
+          <div className="text-brand-muted text-[12px] mt-1 italic leading-snug">
+            "{line.itemNote}"
+          </div>
+        )}
+        {line.unavailableAction === "call" && (
+          <div className="text-brand-muted text-[11.5px] mt-1 leading-snug">
+            If unavailable: call me
+          </div>
+        )}
         <div className="text-brand-ink text-[14px] mt-1.5">
           {formatRM(lineTotal)}
         </div>
