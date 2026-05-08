@@ -225,12 +225,12 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
         )}
 
         {/* Note to restaurant */}
-        <Section title="Note to restaurant" optional>
+        <Section title="Any requests?" optional>
           <div className="py-3">
             <textarea
               value={itemNote}
               onChange={(e) => setItemNote(e.target.value)}
-              placeholder="Add your request (subject to restaurant's discretion)"
+              placeholder="Extra sauce, less spice, no drama."
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-brand-ink placeholder:text-brand-muted resize-none outline-none focus:border-brand-ink min-h-[88px]"
               maxLength={200}
             />
@@ -238,7 +238,7 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
         </Section>
 
         {/* If unavailable */}
-        <Section title="If this item is not available">
+        <Section title="If this item is not available" compact>
           <div className="py-3">
             <div className="relative">
               <select
@@ -304,16 +304,18 @@ function Section({
   subtitle,
   required,
   optional,
+  compact,
   children,
 }: {
   title: string;
   subtitle?: string;
   required?: boolean;
   optional?: boolean;
+  compact?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-6">
+    <section className={compact ? "mt-3" : "mt-6"}>
       <div className="px-5 pb-2 flex items-center justify-between">
         <div>
           <h2 className="text-[17px] font-bold text-brand-ink">{title}</h2>

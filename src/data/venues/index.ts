@@ -1,5 +1,6 @@
 import { MENU, type MenuCategory } from "../menu";
 import { KOHINOOR_MENU } from "../menus/kohinoor";
+import { GOOJIBURG_MENU } from "../menus/goojiburg";
 
 export type DayHours = {
   closed: boolean;
@@ -116,6 +117,8 @@ const IMG = {
     "https://images.unsplash.com/photo-1551782450-a2132b4ba21d?w=1000&q=80&auto=format&fit=crop",
   pourover:
     "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1000&q=80&auto=format&fit=crop",
+  smashburger:
+    "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1000&q=80&auto=format&fit=crop",
 };
 
 export const FOWLBOYS_VENUE: Venue = {
@@ -174,6 +177,34 @@ export const NOKO_NOKO_VENUE: Venue = {
   heroImage: IMG.agaveBar,
   isOpen: true,
   hasOffer: { label: "20% off select items" },
+};
+
+export const GOOJIBURG_VENUE: Venue = {
+  slug: "goojiburg",
+  name: "Goojiburg",
+  tagline: "Smashburgers, hot honey chicken, big energy.",
+  address: "Dewan Damai, 88000 Kota Kinabalu",
+  ssm: "GJB-011",
+  brandTokens: {
+    green: "#06C167",
+    ink: "#0A0A0A",
+    muted: "#6B6B6B",
+    canvas: "#F6F6F6",
+  },
+  orderIdPrefix: "GJ",
+  kitchenPrepDefaultMinutes: 20,
+  deliveryMinSubtotal: 10,
+  hours: standardHours(),
+  menu: GOOJIBURG_MENU,
+  cuisine: "Western",
+  priceTier: 2,
+  rating: 5.0,
+  ratingCount: 23,
+  estimatedDeliveryMinutes: [20, 30],
+  deliveryFee: 5,
+  heroImage: IMG.smashburger,
+  isOpen: true,
+  hasOffer: { label: "First delivery RM2.49" },
 };
 
 const KK_VENUES: Venue[] = [
@@ -445,6 +476,7 @@ const KK_VENUES: Venue[] = [
 ];
 
 export const VENUES: Record<string, Venue> = {
+  [GOOJIBURG_VENUE.slug]: GOOJIBURG_VENUE,
   [FOWLBOYS_VENUE.slug]: FOWLBOYS_VENUE,
   [NOKO_NOKO_VENUE.slug]: NOKO_NOKO_VENUE,
   ...Object.fromEntries(KK_VENUES.map((v) => [v.slug, v])),
