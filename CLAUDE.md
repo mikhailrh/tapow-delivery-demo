@@ -486,7 +486,7 @@ Tapow is WhatsApp-native: customers tap a link or scan a QR to land on this app 
 
 ### Venue catalog
 
-[src/data/venues/index.ts](src/data/venues/index.ts) carries 13 venues — Goojiburg (KK smashburger spot, real menu, top-of-list at 5.0 rating), FowlBoys (KL, full menu), Noko Noko (agave bar in Plaza Damansara), and 10 KK venues (Alu Alu Kitchen, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy KK, Kohinoor, Biru Biru Cafe, El Centro, Octoverse Coffee). Each venue carries discovery-card metadata: `cuisine`, `priceTier` (1–3), `rating`, `ratingCount`, `estimatedDeliveryMinutes` tuple, `deliveryFee`, `heroImage` (Unsplash with stable photo IDs), `isOpen`, optional `hasOffer`. FowlBoys, Kohinoor, and Goojiburg have populated menus; the other 10 carry `menu: []`.
+[src/data/venues/index.ts](src/data/venues/index.ts) carries 13 venues — Goojiburg (KK smashburger spot, real menu, top-of-list at 5.0 rating), FowlBoys (KL, full menu), Noko Noko (agave bar in Plaza Damansara), and 10 KK venues (Alu-Alu Kitchen, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy KK, Kohinoor, Biru Biru Cafe, El Centro, Octoverse Coffee). Each venue carries discovery-card metadata: `cuisine`, `priceTier` (1–3), `rating`, `ratingCount`, `estimatedDeliveryMinutes` tuple, `deliveryFee`, `heroImage` (Unsplash with stable photo IDs), `isOpen`, optional `hasOffer`. FowlBoys, Kohinoor, Goojiburg, and Alu-Alu Kitchen have populated menus; the other 9 carry `menu: []`.
 
 ### Discovery layout
 
@@ -518,13 +518,14 @@ Reads `tapow.<slug>.orders.v1` from localStorage for every venue in `VENUES`, su
 
 ### Per-venue menus
 
-Menus live in [src/data/menus/](src/data/menus/) — one file per venue, each exporting a `MenuCategory[]`. Three are populated today:
+Menus live in [src/data/menus/](src/data/menus/) — one file per venue, each exporting a `MenuCategory[]`. Four are populated today:
 
 - **[src/data/menus/fowlboys.ts](src/data/menus/fowlboys.ts)** — combo items (Bone In, Tenders, Wings) with four required modifier groups (size, heat, dip, side). Heat options on Xtra/XX Hot tiers carry `priceDelta: 2.5` with `perPiece: true` — the size group's selected `pieces` multiply the upcharge, so 3 pieces XX Hot = +RM 7.50. heatOnly items (sandwiches) have just the heat group. Pasta and house salad have an optional add-on group.
 - **[src/data/menus/kohinoor.ts](src/data/menus/kohinoor.ts)** — 32 categories, ~190 items, transcribed from foodpanda. No modifier groups (modifiers absent in source). Items render as price-only entries.
 - **[src/data/menus/goojiburg.ts](src/data/menus/goojiburg.ts)** — KK smashburger spot, 3 categories, 10 items. Beef burgers carry a beef add-ons group (multi, max 6) + a combo group (multi, max 1). Chicken burgers carry their own add-ons group + the same combo group. The schema's `max` enforces foodpanda's "select up to 1" rule.
+- **[src/data/menus/alu-alu-kitchen.ts](src/data/menus/alu-alu-kitchen.ts)** — Chinese seafood, 17 categories, ~75 base items. Stress-tests the schema with three new patterns: (1) **Small/Medium pricing** as a required size group with item-specific deltas (used by 13 categories); (2) **matrix-priced sections** (Noodles 6×7, Noodle Soup 5×7, Live Fish 6×5, Live Prawn 3×2) modeled as one item per cooking style with a shared required modifier for the variable axis (protein/fish/prawn type) — base price = cheapest variant, deltas walk up to the most expensive, no item explosion; (3) **per-kg / seasonal items** keep representative pricing with a description note that the kitchen confirms by weight or market on the day. A few one-offs: half-chicken items skip the size group; CR05 (Singapore Chilli Crab) carries an optional "+RM 5 mantou (4 pcs)" add-on; R02 has an optional "Upgrade to snapper +RM 2".
 
-Each `Venue` carries its menu through `venue.menu`; the customer flow reads from there rather than a static import. [src/screens/MenuScreen.tsx](src/screens/MenuScreen.tsx) and [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx) read from `useVenue().menu`; `findMenuItem` and `CategoryDrawer` take the menu as a parameter / prop. The 10 still-empty venues fall through to the `ComingSoon` placeholder via the `venue.menu.length === 0` gate.
+Each `Venue` carries its menu through `venue.menu`; the customer flow reads from there rather than a static import. [src/screens/MenuScreen.tsx](src/screens/MenuScreen.tsx) and [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx) read from `useVenue().menu`; `findMenuItem` and `CategoryDrawer` take the menu as a parameter / prop. The 9 still-empty venues fall through to the `ComingSoon` placeholder via the `venue.menu.length === 0` gate.
 
 ### Modifier-group schema
 
@@ -569,9 +570,9 @@ ItemScreen renders each modifier group generically: radio for single-select, che
 
 [src/context/OrdersContext.tsx](src/context/OrdersContext.tsx) `buildSeedHistory(venue)` dispatches to one of three paths so the auto-seed isn't shared across venues:
 
-- `venue.menu.length === 0` → returns empty (no phantom orders on the 10 placeholder venues).
+- `venue.menu.length === 0` → returns empty (no phantom orders on the 9 placeholder venues).
 - `venue.slug === "fowlboys"` → `buildFowlBoysSeed(venue)`, hand-picked combo / heat / dip / side data using the new modifier-label shape.
-- Otherwise (Kohinoor, Goojiburg) → `buildGenericSeed(venue)`, which flattens `venue.menu` into a deterministic item pool and picks 22 orders' worth of line items from it. No modifiers attached, just name + qty + price.
+- Otherwise (Kohinoor, Goojiburg, Alu-Alu Kitchen) → `buildGenericSeed(venue)`, which flattens `venue.menu` into a deterministic item pool and picks 22 orders' worth of line items from it. No modifiers attached, just name + qty + price.
 
 `SEED_FLAG_SUFFIX` was bumped to `"everSeeded.v3"` so existing browsers re-seed once on next load with line snapshots in the new `modifierLabels` shape.
 
@@ -591,13 +592,13 @@ The discovery body scrolls inside an `overflow-y-auto` div, not the document, so
 
 ### Out of scope for this pass (and why)
 
-- **Real menus for most venues** — Kohinoor and Goojiburg are populated; the other 10 placeholders are unblocked by the modifier-group schema but still need their data transcribed. Those are next-pass content work, not architecture.
+- **Real menus for most venues** — Kohinoor, Goojiburg, and Alu-Alu Kitchen are populated; the other 9 placeholders are unblocked by the modifier-group schema but still need their data transcribed. Those are next-pass content work, not architecture.
 - **SPA navigation between discovery and venue** — full-page reload is simpler and the WhatsApp in-app browser handles it fine.
 - **A real cart icon badge on the bottom rail** — discovery has no global cart; cart is scoped per venue. Showing a count would require summing across venue carts, which doesn't match the data model.
 - **Geo / pickup / sort by chip** — visual scaffolding only. The brief explicitly said placeholder where needed.
 
 ### Next pass
 
-Content: transcribe menus for the remaining 10 venues (Alu Alu, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy, Biru Biru, El Centro, Octoverse, Noko Noko). The schema now supports the shapes that were blocked before (cocktails with spirit/mixer/ice picks, coffee with size/milk/strength, indian thalis with spice levels). Each venue is a new file in [src/data/menus/](src/data/menus/) plus a `menu:` wire-up in [src/data/venues/index.ts](src/data/venues/index.ts).
+Content: transcribe menus for the remaining 9 venues (Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy, Biru Biru, El Centro, Octoverse, Noko Noko). The schema now supports the shapes that were blocked before (cocktails with spirit/mixer/ice picks, coffee with size/milk/strength, indian thalis with spice levels). Each venue is a new file in [src/data/menus/](src/data/menus/) plus a `menu:` wire-up in [src/data/venues/index.ts](src/data/venues/index.ts). Alu-Alu Kitchen ([src/data/menus/alu-alu-kitchen.ts](src/data/menus/alu-alu-kitchen.ts)) is the heaviest reference shape — its matrix-priced sections, Small/Medium size group helper, and per-kg / seasonal handling are all reusable patterns for the rest.
 
 Architecture-wise, the remaining gaps are still customer identity (cross-venue profile / order history) and the discovery-page polish noted in Pass 2.
