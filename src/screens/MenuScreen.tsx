@@ -165,16 +165,19 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
 
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
     const out: { item: MenuItem; categoryName: string }[] = [];
     for (const cat of MENU) {
       for (const item of cat.items) {
+        if (!q) {
+          out.push({ item, categoryName: cat.name });
+          continue;
+        }
         const hay = `${item.name} ${item.description ?? ""}`.toLowerCase();
         if (hay.includes(q)) out.push({ item, categoryName: cat.name });
       }
     }
     return out;
-  }, [query]);
+  }, [query, MENU]);
 
   const pickCategory = (id: string) => {
     const section = sectionRefs.current[id];
@@ -242,7 +245,7 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
                   ref={searchInputRef}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search menu"
+                  placeholder="Have a craving?"
                   className="flex-1 bg-transparent text-[14px] text-brand-ink placeholder:text-brand-muted focus:outline-none min-w-0"
                 />
                 {query && (
@@ -769,14 +772,8 @@ function SearchBody({
   onPick: (id: string) => void;
 }) {
   const { isItemAvailable } = useStock();
-  if (!query.trim()) {
-    return (
-      <div className="px-5 pt-10 text-center text-brand-muted text-[14px]">
-        Search by name or description
-      </div>
-    );
-  }
-  if (results.length === 0) {
+  const hasQuery = query.trim().length > 0;
+  if (hasQuery && results.length === 0) {
     return (
       <div className="px-5 pt-10 text-center text-brand-muted text-[14px]">
         No matches for <span className="text-brand-ink font-semibold">"{query}"</span>
@@ -790,9 +787,11 @@ function SearchBody({
   }
   return (
     <section className="px-4 pt-3 pb-28">
-      <div className="text-[12px] text-brand-muted pb-2">
-        {results.length} {results.length === 1 ? "result" : "results"}
-      </div>
+      {hasQuery && (
+        <div className="text-[12px] text-brand-muted pb-2">
+          {results.length} {results.length === 1 ? "result" : "results"}
+        </div>
+      )}
       {Array.from(grouped.entries()).map(([categoryName, items]) => (
         <div key={categoryName} className="mb-2">
           <h3 className="text-[13px] font-semibold text-brand-muted uppercase tracking-wide pt-3 pb-1">
