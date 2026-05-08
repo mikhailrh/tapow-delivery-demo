@@ -2,6 +2,7 @@ import type { MenuCategory } from "../menu";
 import { FOWLBOYS_MENU } from "../menus/fowlboys";
 import { KOHINOOR_MENU } from "../menus/kohinoor";
 import { GOOJIBURG_MENU } from "../menus/goojiburg";
+import { ALU_ALU_KITCHEN_MENU } from "../menus/alu-alu-kitchen";
 
 export type DayHours = {
   closed: boolean;
@@ -211,9 +212,9 @@ export const GOOJIBURG_VENUE: Venue = {
 const KK_VENUES: Venue[] = [
   {
     slug: "alu-alu-kitchen",
-    name: "Alu Alu Kitchen",
-    tagline: "Sustainable seafood, market-fresh.",
-    address: "Lot 32, Lorong Puyuh, Inanam Square, 88450 Kota Kinabalu",
+    name: "Alu-Alu Kitchen",
+    tagline: "Freshly served from farm to your dining table.",
+    address: "Bayu Indah, Kelombong, 88450 Kota Kinabalu",
     ssm: "AAK-001",
     brandTokens: {
       green: "#06C167",
@@ -225,7 +226,7 @@ const KK_VENUES: Venue[] = [
     kitchenPrepDefaultMinutes: 30,
     deliveryMinSubtotal: 30,
     hours: standardHours(),
-    menu: [],
+    menu: ALU_ALU_KITCHEN_MENU,
     cuisine: "Seafood",
     priceTier: 2,
     rating: 4.8,
