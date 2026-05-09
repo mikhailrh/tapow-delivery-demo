@@ -1,5 +1,5 @@
 import { VENUE_LIST, type Cuisine, type Venue } from "../../data/venues";
-import type { Order } from "../../lib/orders";
+import type { Order, OrderStatus, StatusUpdate } from "../../lib/orders";
 
 export type CuisineTile = {
   cuisine: Cuisine;
@@ -61,4 +61,54 @@ export function relativeTimeFrom(ts: number): string {
   if (hours >= 1) return `${hours}h ago`;
   const minutes = Math.max(1, Math.floor(ms / 60000));
   return `${minutes}m ago`;
+}
+
+export type NotificationEntry = {
+  venueSlug: string;
+  venueName: string;
+  orderShortId: string;
+  text: string;
+  at: number;
+  status: OrderStatus;
+  fromVendor: boolean;
+};
+
+const NOTIF_HORIZON_MS = 7 * 86400000;
+const NOTIF_LIMIT = 12;
+
+function loadOrdersForSlug(slug: string): Order[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(`tapow.${slug}.orders.v1`);
+    if (!raw) return [];
+    const data = JSON.parse(raw) as { orders?: Order[] };
+    return data.orders ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export function buildNotifications(): NotificationEntry[] {
+  const cutoff = Date.now() - NOTIF_HORIZON_MS;
+  const entries: NotificationEntry[] = [];
+  for (const venue of VENUE_LIST) {
+    const orders = loadOrdersForSlug(venue.slug);
+    for (const order of orders) {
+      const updates = order.statusUpdates ?? [];
+      const last: StatusUpdate | undefined = updates[updates.length - 1];
+      if (!last) continue;
+      if (last.at < cutoff) continue;
+      entries.push({
+        venueSlug: venue.slug,
+        venueName: venue.name,
+        orderShortId: order.shortId,
+        text: last.text,
+        at: last.at,
+        status: order.status,
+        fromVendor: last.fromVendor === true,
+      });
+    }
+  }
+  entries.sort((a, b) => b.at - a.at);
+  return entries.slice(0, NOTIF_LIMIT);
 }
