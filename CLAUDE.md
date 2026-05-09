@@ -562,6 +562,21 @@ type MenuItem = {
 
 ItemScreen renders each modifier group generically: radio for single-select, checkbox for multi. The "select up to N" cap on multi groups bumps out the oldest selection rather than refusing the click — feels closer to a dropdown than a strict gate. Validation: required groups need at least one selection; multi-with-max can't exceed max.
 
+### Per-item note + unavailable action
+
+Below the modifier groups, every item has two extra inputs (rendered for *all* items, not gated on schema):
+
+- **"Any requests?"** — optional textarea, max 200 chars, placeholder *"Extra sauce, less spice, no drama."* Stored on the line as `itemNote: string` (trimmed; empty → undefined). Distinct from the order-level `note` on CartScreen — that one's still the kitchen-wide note.
+- **"If this item is not available"** — required `<select>`, options `"remove"` (default) / `"call"`. Stored as `unavailableAction: "remove" | "call"`. Snapshot only writes the field when it's non-default (`"call"`) so the seed history and most lines stay clean.
+
+Both fields live on `CartLine` ([src/context/CartContext.tsx](src/context/CartContext.tsx)) and are copied through `snapshotLines()` into `OrderLineSnapshot` ([src/lib/orders.ts](src/lib/orders.ts)). `UnavailableAction` type is exported from CartContext.
+
+Renderers:
+- **CartScreen** — italic `"…note…"` line under the line title; small amber chip "Call if unavailable" when `unavailableAction === "call"`.
+- **VendorOrderCard** — same shape: italic `Note: "…"` line and the "Call if unavailable" chip in the items list.
+
+The unavailable-action picker exists because Tapow's WhatsApp identity means we can't fall back on an in-app push when an item 86's mid-cooking — the kitchen needs to know "remove silently" vs "call me, I'll re-pick" upfront.
+
 ### Stock — items only
 
 `StockContext` was simplified: the FowlBoys-only `disabledHeats` field is gone. Now just `disabledItemIds: string[]`. VendorStockScreen and ManagerApp's stock UI both read from `useVenue().menu`, so a non-FowlBoys vendor sees their own menu's items in the stock toggles. Storage key bumped `stock.v1` → `stock.v2`.
@@ -590,15 +605,27 @@ The discovery body scrolls inside an `overflow-y-auto` div, not the document, so
 
 [src/components/icons.tsx](src/components/icons.tsx) gained `HomeIcon`, `UserIcon`, `StarIcon` (filled), `FilterIcon`, `SortIcon`, `ShoppingBagIcon`, `TagIcon`.
 
+### Discovery polish — Pass 3
+
+Wired the four chrome elements that were originally placeholder on the discovery screen:
+
+- **Pickup tab** is now stateful (paired with Delivery). When pickup is on, restaurant cards swap their meta line from `"25–35 min · RM5 delivery"` to `"Ready in {kitchenPrepDefaultMinutes} min · Pickup"`, the Under-30 chip filters by prep minutes instead of delivery ETA, the Sort sheet's time option re-labels to "Pickup time", and the delivery-fee sort option is hidden (irrelevant in pickup mode).
+- **Sort by** chip opens a bottom sheet with Recommended / Rating / Delivery (or Pickup) time / Delivery fee. Chip label updates to reflect the active sort. Closed venues stay anchored to the bottom regardless of sort key. Sheet uses the standard `absolute inset-0 z-40 bg-black/40` + `sheetUp` keyframe pattern.
+- **Notification bell** opens a bottom sheet of cross-venue order updates pulled from `tapow.<slug>.orders.v1` for every venue in `VENUES`. `buildNotifications()` lives in [src/screens/discovery/shared.ts](src/screens/discovery/shared.ts) — last 7 days, top 12, sorted desc by `at`. Each row: venue name + colored status pill (incoming/cooking/ready/collected/rejected/cancelled) + `#shortId` + last status text + relative time. Free-text vendor messages get a 💬 avatar; system events get 🛵. Bell carries an unread badge counting active orders (incoming/cooking/ready). Tap a row → navigates to that venue.
+- **Hero category cards** (Near Me / Top Rated / Free Delivery / New on Tapow) toggle a single `heroFilter` exclusively. Active card gets a colored ring matching its accent. Filters: Top Rated `rating ≥ 4.7`, Free Delivery matches venues whose `hasOffer.label` contains "free delivery" (or `deliveryFee === 0`), New on Tapow `ratingCount < 250`, Near Me doesn't filter — it biases the sort toward fastest first regardless of the active sort key.
+
+Layered with existing chips (cuisine tile / Under 30 min / Offers): all filters AND together. The list heading swaps to reflect the active filter ("Indian restaurants" / "Top rated" / etc.). Notifications sheet re-reads localStorage every time it's opened, so a freshly-placed order shows up without a refresh.
+
 ### Out of scope for this pass (and why)
 
 - **Real menus for most venues** — Kohinoor, Goojiburg, and Alu-Alu Kitchen are populated; the other 9 placeholders are unblocked by the modifier-group schema but still need their data transcribed. Those are next-pass content work, not architecture.
 - **SPA navigation between discovery and venue** — full-page reload is simpler and the WhatsApp in-app browser handles it fine.
 - **A real cart icon badge on the bottom rail** — discovery has no global cart; cart is scoped per venue. Showing a count would require summing across venue carts, which doesn't match the data model.
-- **Geo / pickup / sort by chip** — visual scaffolding only. The brief explicitly said placeholder where needed.
+- **Under RM3.00 chip / Filters chip / hero "Free Delivery" today-only copy** — the two named chips are still visual; the hero subtitle "Today only" is decorative since we don't have a time-bounded promo on the platform yet.
+- **Geo / distance** — Near Me is a speed proxy, not a real distance sort. No coordinates on venues.
 
 ### Next pass
 
 Content: transcribe menus for the remaining 9 venues (Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy, Biru Biru, El Centro, Octoverse, Noko Noko). The schema now supports the shapes that were blocked before (cocktails with spirit/mixer/ice picks, coffee with size/milk/strength, indian thalis with spice levels). Each venue is a new file in [src/data/menus/](src/data/menus/) plus a `menu:` wire-up in [src/data/venues/index.ts](src/data/venues/index.ts). Alu-Alu Kitchen ([src/data/menus/alu-alu-kitchen.ts](src/data/menus/alu-alu-kitchen.ts)) is the heaviest reference shape — its matrix-priced sections, Small/Medium size group helper, and per-kg / seasonal handling are all reusable patterns for the rest.
 
-Architecture-wise, the remaining gaps are still customer identity (cross-venue profile / order history) and the discovery-page polish noted in Pass 2.
+Architecture-wise, the remaining gap is customer identity (cross-venue profile / order history — the discovery bottom-rail Profile icon is still unwired).
