@@ -17,6 +17,7 @@ import VendorOrderCard from "./VendorOrderCard";
 import PrepTimePickerSheet from "./PrepTimePickerSheet";
 import PushBackEtaSheet from "./PushBackEtaSheet";
 import RejectModal from "./RejectModal";
+import EditOrderSheet from "./EditOrderSheet";
 import { UndoSnackbar, type UndoToast, newToastId } from "../../components/UndoSnackbar";
 import type { Order } from "../../lib/orders";
 import { useStock } from "../../context/StockContext";
@@ -43,6 +44,7 @@ export default function VendorMainScreen() {
   const [acceptingFor, setAcceptingFor] = useState<Order | null>(null);
   const [rejectingFor, setRejectingFor] = useState<Order | null>(null);
   const [pushBackFor, setPushBackFor] = useState<Order | null>(null);
+  const [editingFor, setEditingFor] = useState<Order | null>(null);
   const [toast, setToast] = useState<UndoToast | null>(null);
   const [collectedCardsHidden, setCollectedCardsHidden] = useState<Set<string>>(
     new Set(),
@@ -266,7 +268,18 @@ export default function VendorMainScreen() {
                 isFresh={freshIds.has(o.id)}
                 primaryAction={() => setAcceptingFor(o)}
                 primaryLabel={`Accept`}
-                secondaryAction={() => setRejectingFor(o)}
+                menuItems={
+                  o.status === "incoming"
+                    ? [
+                        { label: "Edit items", onClick: () => setEditingFor(o) },
+                        {
+                          label: "Reject order",
+                          tone: "destructive",
+                          onClick: () => setRejectingFor(o),
+                        },
+                      ]
+                    : undefined
+                }
               />
             ))}
           </Column>
@@ -284,6 +297,7 @@ export default function VendorMainScreen() {
                 primaryAction={() => onMarkReady(o)}
                 primaryLabel="Mark ready"
                 menuItems={[
+                  { label: "Edit items", onClick: () => setEditingFor(o) },
                   { label: "Push back ETA", onClick: () => setPushBackFor(o) },
                 ]}
               />
@@ -333,7 +347,21 @@ export default function VendorMainScreen() {
                   isFresh={freshIds.has(o.id)}
                   primaryAction={() => setAcceptingFor(o)}
                   primaryLabel="Accept"
-                  secondaryAction={() => setRejectingFor(o)}
+                  menuItems={
+                    o.status === "incoming"
+                      ? [
+                          {
+                            label: "Edit items",
+                            onClick: () => setEditingFor(o),
+                          },
+                          {
+                            label: "Reject order",
+                            tone: "destructive",
+                            onClick: () => setRejectingFor(o),
+                          },
+                        ]
+                      : undefined
+                  }
                 />
               ))
             ))}
@@ -349,6 +377,10 @@ export default function VendorMainScreen() {
                   primaryAction={() => onMarkReady(o)}
                   primaryLabel="Mark ready"
                   menuItems={[
+                    {
+                      label: "Edit items",
+                      onClick: () => setEditingFor(o),
+                    },
                     {
                       label: "Push back ETA",
                       onClick: () => setPushBackFor(o),
@@ -441,6 +473,16 @@ export default function VendorMainScreen() {
             onPushBack(pushBackFor, addMin);
             setPushBackFor(null);
           }}
+        />
+      )}
+
+      {editingFor && (
+        <EditOrderSheet
+          order={
+            // re-read by id so the sheet re-renders if context updates mid-edit
+            orders.find((o) => o.id === editingFor.id) ?? editingFor
+          }
+          onClose={() => setEditingFor(null)}
         />
       )}
 

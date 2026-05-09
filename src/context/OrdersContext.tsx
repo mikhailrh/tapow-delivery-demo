@@ -16,9 +16,14 @@ import {
   rollDriverLegs,
   type Driver,
   type Order,
+  type OrderLineSnapshot,
   type OrderStatus,
   type RefundReason,
 } from "../lib/orders";
+import {
+  SERVICE_CHARGE_RATE,
+  SST_RATE,
+} from "../lib/money";
 import { useVenue } from "./VenueContext";
 import type { Venue } from "../data/venues";
 
@@ -73,6 +78,19 @@ type OrdersContextValue = {
     amount: number,
     reason: RefundReason,
     note?: string,
+  ) => void;
+  /**
+   * Replace an order's lines (after vendor talks to the customer about a sub /
+   * qty change / removal). Recalculates subtotal / service charge / SST / total.
+   * Preserves deliveryFee and discount as-is. If the new total is lower than
+   * the old, auto-issues a partial refund for the difference. Pushes a single
+   * status update with `summary` so the customer sees one combined message
+   * instead of one per line.
+   */
+  applyOrderEdits: (
+    id: string,
+    newLines: OrderLineSnapshot[],
+    summary: string,
   ) => void;
   /** Restore an order to a prior status — used by undo snackbars. */
   setStatus: (id: string, status: OrderStatus) => void;
@@ -415,6 +433,99 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
+  const applyOrderEdits = useCallback<OrdersContextValue["applyOrderEdits"]>(
+    (id, newLines, summary) => {
+      if (newLines.length === 0) return;
+      const trimmedSummary = summary.trim();
+      const now = Date.now();
+      let refundAmount = 0;
+      update((prev) => ({
+        ...prev,
+        orders: prev.orders.map((o) => {
+          if (o.id !== id) return o;
+          if (o.status !== "incoming" && o.status !== "cooking") return o;
+          const subtotal = newLines.reduce(
+            (acc, l) => acc + l.unitPrice * l.quantity,
+            0,
+          );
+          const serviceCharge = subtotal * SERVICE_CHARGE_RATE;
+          const sst = subtotal * SST_RATE;
+          const newTotal = Math.max(
+            0,
+            subtotal +
+              serviceCharge +
+              sst +
+              o.deliveryFee -
+              (o.discount ?? 0),
+          );
+          refundAmount = Math.max(0, +(o.total - newTotal).toFixed(2));
+          return {
+            ...o,
+            lines: newLines,
+            subtotal,
+            serviceCharge,
+            sst,
+            total: newTotal,
+            statusUpdates: [
+              ...o.statusUpdates,
+              {
+                at: now,
+                text: trimmedSummary,
+                fromVendor: true,
+              },
+            ],
+          };
+        }),
+      }));
+      if (refundAmount > 0.01) {
+        // Pre-paid orders: dropping items / qty owes the customer money.
+        // Mirror issueRefund's pending → processed mock cycle.
+        update((prev) => ({
+          ...prev,
+          orders: prev.orders.map((o) => {
+            if (o.id !== id) return o;
+            return {
+              ...o,
+              refund: {
+                amount: refundAmount,
+                reason: "Out of stock",
+                note: "Order edited by kitchen",
+                status: "pending",
+                requestedAt: now,
+              },
+              statusUpdates: [
+                ...o.statusUpdates,
+                {
+                  at: now + 1,
+                  text: `Partial refund of RM${refundAmount.toFixed(2)} processing — back to your card in 3–5 business days.`,
+                  fromVendor: true,
+                },
+              ],
+            };
+          }),
+        }));
+        setTimeout(() => {
+          update((prev) => ({
+            ...prev,
+            orders: prev.orders.map((o) => {
+              if (o.id !== id || !o.refund) return o;
+              if (o.refund.status === "processed") return o;
+              return {
+                ...o,
+                refund: {
+                  ...o.refund,
+                  status: "processed",
+                  processedAt: Date.now(),
+                },
+              };
+            }),
+          }));
+        }, 2000);
+      }
+    },
+    [update],
+  );
+
   const setStatus = useCallback<OrdersContextValue["setStatus"]>(
     (id, status) => {
       update((prev) => ({
@@ -460,6 +571,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       pushBackEta,
       sendVendorMessage,
       issueRefund,
+      applyOrderEdits,
       setStatus,
       restoreOrder,
       resetAll,
@@ -477,6 +589,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       pushBackEta,
       sendVendorMessage,
       issueRefund,
+      applyOrderEdits,
       setStatus,
       restoreOrder,
       resetAll,
