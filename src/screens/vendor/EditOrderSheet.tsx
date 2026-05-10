@@ -7,6 +7,7 @@ import {
   TrashIcon,
 } from "../../components/icons";
 import { useOrders } from "../../context/OrdersContext";
+import { useStock } from "../../context/StockContext";
 import { useVenue } from "../../context/VenueContext";
 import { formatRM, SERVICE_CHARGE_RATE, SST_RATE } from "../../lib/money";
 import type {
@@ -64,7 +65,7 @@ function summarize(original: WorkingLine[], working: WorkingLine[]): string {
 
   for (const orig of original) {
     if (!workingKeys.has(orig._key)) {
-      parts.push(`removed ${orig.quantity}× ${orig.itemName}`);
+      parts.push(`${orig.itemName} out of stock — removed`);
     }
   }
   for (const w of working) {
@@ -104,6 +105,7 @@ export default function EditOrderSheet({
   onClose: () => void;
 }) {
   const { applyOrderEdits } = useOrders();
+  const { toggleItem, isItemAvailable } = useStock();
   const venue = useVenue();
   const [working, setWorking] = useState<WorkingLine[]>(() =>
     toWorkingLines(order.lines),
@@ -111,6 +113,8 @@ export default function EditOrderSheet({
   const [substitutingFor, setSubstitutingFor] = useState<WorkingLine | null>(
     null,
   );
+  // Track which lines were removed so we can 86 their items on apply.
+  const [removedItemIds, setRemovedItemIds] = useState<Set<string>>(new Set());
 
   const original = useMemo(() => toWorkingLines(order.lines), [order.lines]);
   const newTotals = useMemo(
@@ -141,7 +145,15 @@ export default function EditOrderSheet({
   };
   const removeLine = (key: string) => {
     if (working.length <= 1) return; // Can't empty the order — vendor should reject instead.
+    const removing = working.find((l) => l._key === key);
     setWorking((prev) => prev.filter((l) => l._key !== key));
+    if (removing) {
+      setRemovedItemIds((prev) => {
+        const next = new Set(prev);
+        next.add(removing.itemId);
+        return next;
+      });
+    }
   };
   const onSubstitute = (replacement: OrderLineSnapshot) => {
     if (!substitutingFor) return;
@@ -168,6 +180,11 @@ export default function EditOrderSheet({
       void swappedFromName;
       return rest;
     });
+    // 86 anything the kitchen marked out of stock so the next customer
+    // doesn't immediately re-order it.
+    for (const itemId of removedItemIds) {
+      if (isItemAvailable(itemId)) toggleItem(itemId);
+    }
     applyOrderEdits(order.id, stripped, summary);
     onClose();
   };
@@ -236,15 +253,16 @@ export default function EditOrderSheet({
                       <button
                         onClick={() => removeLine(l._key)}
                         disabled={working.length <= 1}
-                        aria-label="Remove line"
+                        aria-label="Mark item out of stock and remove"
                         className={
-                          "p-1.5 rounded-md " +
+                          "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11.5px] font-semibold border whitespace-nowrap " +
                           (working.length <= 1
-                            ? "text-gray-300"
-                            : "text-red-600 hover:bg-red-50")
+                            ? "border-gray-200 text-gray-300"
+                            : "border-red-200 text-red-600 hover:bg-red-50")
                         }
                       >
-                        <TrashIcon className="w-4 h-4" />
+                        <TrashIcon className="w-3 h-3" />
+                        Out of stock
                       </button>
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-3">
