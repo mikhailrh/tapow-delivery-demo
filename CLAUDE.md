@@ -423,11 +423,13 @@ On phones / tablets the frame fills the viewport. On desktop it locks to the dev
 
 ## Known gaps / next sessions
 
-Removed (now built): real refund flow, address picker, customer cancellation, push-back ETA, vendor → customer messaging, operating hours and schedule, end-of-day close-out, tax receipt with venue-controlled tax info, delivery minimum, promotions, two-component ETA model, kitchen prep default editor.
+> **🚩 FLAG TO USER AT NEXT SESSION START:** The vendor edit-order flow ([EditOrderSheet.tsx](src/screens/vendor/EditOrderSheet.tsx)) handles the upcharge case (sub costs more than original) by *only flagging it* in the sheet. The customer's WhatsApp doesn't reflect the new charge, no Stripe top-up fires. **Real plan: Stripe off-session charge with a saved PaymentMethod.** First payment at checkout sets `setup_future_usage: 'off_session'` and saves the card on a `Customer`. When kitchen edit-pushes the total up, backend creates a fresh PaymentIntent for the delta with `off_session: true, confirm: true, customer, payment_method`. Silent success → Stripe email receipt. `authentication_required` error → fall back to a WhatsApp link with `next_action.use_stripe_sdk` redirect for 3DS. Downcharge case (already wired in `applyOrderEdits`) just needs the mock partial-refund swapped for `stripe.refunds.create({ payment_intent, amount })` against the original PI. Demo-only stop-gap if user wants visible UX in the prototype: add a fake "Card charged RM4.64 — top-up for kitchen substitution" bubble to the customer WhatsApp on the upcharge path. Open the conversation by raising this — user explicitly asked to be reminded.
+
+Removed (now built): real refund flow, address picker, customer cancellation, push-back ETA, vendor → customer messaging, operating hours and schedule, end-of-day close-out, tax receipt with venue-controlled tax info, delivery minimum, promotions, two-component ETA model, kitchen prep default editor, vendor edit-order flow.
 
 Still gaps:
 1. **Real photography.** Only `Bone In` has an image. Every other item screen renders a tall white block. Replace `MenuItem.image` paths when FowlBoys provides shots.
-2. **Real Billplz** behind Place Order. `Card •••• 4242` is a placeholder.
+2. **Real Stripe** behind Place Order. `Card •••• 4242` is a placeholder. Production uses Stripe (not Billplz, despite earlier doc references); see the upcharge-handling flag at the top of this section for the broader payment-flow plan.
 3. **Real WhatsApp Business API** for the receipt + status updates. The customer's chat is mocked.
 4. **Real Lalamove** for driver dispatch. Currently faked at Accept time with one of four pool drivers; the two driver legs are mocked at order creation with fixed random ranges.
 5. **Tablet heartbeat** — described in the brief, not built. Production: if vendor app hasn't pinged in 5 min → auto-paused + WhatsApp alert to owner.
