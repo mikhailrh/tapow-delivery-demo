@@ -288,7 +288,7 @@ export default function CheckoutScreen() {
           className={
             "w-full rounded-full py-3.5 font-semibold transition-colors " +
             (isAcceptingOrders && !blockedByDeliveryMin
-              ? "bg-brand-green text-white"
+              ? "bg-brand-green hover:bg-brand-greenDeep active:bg-brand-greenDeep text-white"
               : "bg-gray-200 text-gray-400 cursor-not-allowed")
           }
         >

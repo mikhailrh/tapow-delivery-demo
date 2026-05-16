@@ -8,7 +8,8 @@ export default {
     extend: {
       colors: {
         brand: {
-          green: "var(--brand-green)",
+          green: "#CC6A47",
+          greenDeep: "#B25634",
           ink: "var(--brand-ink)",
           muted: "var(--brand-muted)",
           canvas: "var(--brand-canvas)",

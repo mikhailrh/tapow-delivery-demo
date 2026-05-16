@@ -211,7 +211,7 @@ function TodayScreen() {
         ) : pastCloseTime ? (
           <button
             onClick={onCloseDay}
-            className="mt-4 w-full rounded-xl bg-brand-green text-white py-2.5 text-[13px] font-bold"
+            className="mt-4 w-full rounded-xl bg-brand-green hover:bg-brand-greenDeep active:bg-brand-greenDeep text-white py-2.5 text-[13px] font-bold transition-colors"
           >
             Close day · review summary
           </button>

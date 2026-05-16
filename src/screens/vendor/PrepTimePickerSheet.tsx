@@ -120,7 +120,7 @@ export default function PrepTimePickerSheet({
           </button>
           <button
             onClick={() => onPick(adjusted(25))}
-            className="rounded-full py-3 bg-brand-green text-white font-bold text-[14px]"
+            className="rounded-full py-3 bg-brand-green hover:bg-brand-greenDeep active:bg-brand-greenDeep text-white font-bold text-[14px] transition-colors"
           >
             Accept · {adjusted(25)} min
           </button>
