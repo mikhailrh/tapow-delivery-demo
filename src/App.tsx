@@ -20,6 +20,7 @@ import ConfirmationScreen from "./screens/ConfirmationScreen";
 import ItemScreen from "./screens/ItemScreen";
 import MenuScreen from "./screens/MenuScreen";
 import WhatsAppScreen from "./screens/WhatsAppScreen";
+import OrderTrackingScreen from "./screens/OrderTrackingScreen";
 import OrderChatScreen from "./screens/OrderChatScreen";
 import VendorApp from "./screens/vendor/VendorApp";
 import ManagerApp from "./screens/manager/ManagerApp";
@@ -40,6 +41,8 @@ function CustomerScreen() {
       return <ConfirmationScreen orderId={screen.orderId} />;
     case "whatsapp":
       return <WhatsAppScreen orderId={screen.orderId} />;
+    case "orderTracking":
+      return <OrderTrackingScreen orderId={screen.orderId} />;
     case "orderChat":
       return <OrderChatScreen orderId={screen.orderId} />;
   }

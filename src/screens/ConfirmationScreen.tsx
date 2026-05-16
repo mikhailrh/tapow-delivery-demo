@@ -10,7 +10,11 @@ export default function ConfirmationScreen({
   const { go } = useNav();
 
   useEffect(() => {
-    const t = setTimeout(() => go({ name: "whatsapp", orderId }), 1800);
+    if (!orderId) return;
+    const t = setTimeout(
+      () => go({ name: "orderTracking", orderId }),
+      1800,
+    );
     return () => clearTimeout(t);
   }, [go, orderId]);
 
@@ -27,7 +31,7 @@ export default function ConfirmationScreen({
       </div>
       <h1 className="text-[24px] font-bold text-brand-ink">Order placed!</h1>
       <p className="text-brand-muted mt-2 text-center text-[14px]">
-        Opening WhatsApp so we can keep you posted on your order…
+        Tracking your order…
       </p>
 
       <div className="mt-10 flex gap-1">

@@ -16,6 +16,7 @@ import {
 import { calculateSavings } from "../lib/pricing";
 import { openPrintableReceipt } from "../lib/receipt";
 import { BackIcon, PhoneIcon, VideoIcon } from "../components/icons";
+import OrderReceiptContent from "../components/OrderReceiptContent";
 
 const WA_HEADER = "#075E54";
 const WA_CHAT_BG = "#ECE5DD";
@@ -166,56 +167,7 @@ export default function WhatsAppScreen({
           <div className="text-[13px] text-brand-ink/90 mb-2">
             We got it — here's your receipt:
           </div>
-          <div className="bg-gray-50 rounded-lg p-2.5 text-[12.5px] space-y-2">
-            {stable.lines.map((s, idx) => (
-              <div key={idx}>
-                <div className="flex justify-between gap-3">
-                  <span className="font-medium">
-                    {s.quantity}× {s.itemName}
-                  </span>
-                  <span className="font-medium whitespace-nowrap">
-                    {formatRM(s.unitPrice * s.quantity)}
-                  </span>
-                </div>
-                {s.modifierLabels.length > 0 && (
-                  <div className="text-brand-muted text-[11.5px] leading-snug mt-0.5 pl-2">
-                    {s.modifierLabels.join(" · ")}
-                  </div>
-                )}
-              </div>
-            ))}
-            <div className="border-t border-gray-200 mt-1.5 pt-1.5">
-              <Row label="Subtotal" value={formatRM(stable.subtotal)} />
-              <Row
-                label="Service charge (10%)"
-                value={formatRM(stable.serviceCharge)}
-              />
-              <Row label="SST (6%)" value={formatRM(stable.sst)} />
-              {stable.deliveryFee > 0 && (
-                <Row label="Delivery" value={formatRM(stable.deliveryFee)} />
-              )}
-              {stable.discount && stable.discount > 0 ? (
-                <Row
-                  label={
-                    <span className="text-brand-green">
-                      Discount · {stable.promoCode ?? "Promo"}
-                    </span>
-                  }
-                  value={
-                    <span className="text-brand-green">
-                      -{formatRM(stable.discount)}
-                    </span>
-                  }
-                />
-              ) : null}
-              <Row
-                label={<span className="font-bold">Total</span>}
-                value={
-                  <span className="font-bold">{formatRM(stable.total)}</span>
-                }
-              />
-            </div>
-          </div>
+          <OrderReceiptContent order={stable} />
           <div className="text-[12px] text-brand-muted mt-2">
             Order #{stable.shortId} · Paid · Card •••• 4242
           </div>
@@ -531,21 +483,6 @@ function Bubble({
           {time}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-}: {
-  label: React.ReactNode;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="flex justify-between gap-3 py-0.5 text-[12px]">
-      <span>{label}</span>
-      <span>{value}</span>
     </div>
   );
 }

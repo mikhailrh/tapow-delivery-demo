@@ -5,10 +5,8 @@ import { useVenue } from "../context/VenueContext";
 import {
   countThreadImages,
   getChatPhase,
-  lifecycleLabel,
   MAX_IMAGES_PER_THREAD,
   type ChatPhase,
-  type LifecycleLine,
   type Order,
   type OrderMessage,
 } from "../lib/orders";
@@ -16,13 +14,13 @@ import { compressImageToDataUrl } from "../lib/imageCompress";
 import { BackIcon, PaperclipIcon } from "../components/icons";
 
 /**
- * In-platform chat home for an order. WhatsApp carries notifications + the
- * receipt + a preview pill that deep-links here; the actual two-way thread,
- * opt-in reviews, and image attach live in this surface (Tapow-styled).
- *
- * The "Back to WhatsApp" header control is a demo-flow device — in production
- * a customer re-enters this screen via a WhatsApp notification, not an in-app
- * button. The control stays here so the demo can replay the round trip.
+ * In-platform chat for an order. The two-way thread, opt-in review, and image
+ * attach live here. The single-order TRACKING surface is
+ * [OrderTrackingScreen.tsx](src/screens/OrderTrackingScreen.tsx) — full
+ * lifecycle status, ETA, rider card, payment, and receipt. This screen is
+ * deliberately chat-only; the venue name + #shortId in the header carry
+ * enough context, and back() pops to whichever surface opened the chat
+ * (tracking row OR WhatsApp preview pill — both work via NavContext stack pop).
  */
 export default function OrderChatScreen({ orderId }: { orderId: string }) {
   const { back, go } = useNav();
@@ -48,7 +46,6 @@ export default function OrderChatScreen({ orderId }: { orderId: string }) {
     <OrderChatBody
       order={stable}
       venueName={venue.name}
-      orderPrefix={venue.orderIdPrefix}
       onBack={back}
       onSendText={(text) => sendCustomerMessage(stable.id, { text })}
       onAttachImage={(file) =>
@@ -83,7 +80,6 @@ async function attachImage(
 function OrderChatBody({
   order,
   venueName,
-  orderPrefix,
   onBack,
   onSendText,
   onAttachImage,
@@ -91,7 +87,6 @@ function OrderChatBody({
 }: {
   order: Order;
   venueName: string;
-  orderPrefix: string;
   onBack: () => void;
   onSendText: (text: string) => void;
   onAttachImage: (file: File) => Promise<string | null>;
@@ -134,36 +129,25 @@ function OrderChatBody({
     setLastSeenAt(Date.now());
   };
 
-  const monogram = orderPrefix.slice(0, 2).toUpperCase();
-
   return (
     <div className="relative flex-1 flex flex-col bg-white overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
         <button
           onClick={onBack}
-          aria-label="Back to WhatsApp"
-          className="flex items-center gap-1 -ml-1 p-1 text-brand-ink"
+          aria-label="Back"
+          className="p-1 -ml-1 text-brand-ink"
         >
-          <BackIcon className="w-5 h-5" />
-          <span className="text-[13px] font-semibold">Back to WhatsApp</span>
+          <BackIcon className="w-6 h-6" />
         </button>
-        <div className="flex-1" />
-        <div className="text-right">
-          <div className="text-[12px] font-bold text-brand-ink leading-tight">
+        <div className="flex-1 min-w-0">
+          <div className="text-[15px] font-bold text-brand-ink leading-tight truncate">
+            {venueName}
+          </div>
+          <div className="text-[11.5px] text-brand-muted leading-tight">
             #{order.shortId}
           </div>
-          <div className="text-[10.5px] text-brand-muted leading-tight">
-            {order.fulfillment}
-          </div>
-        </div>
-        <div className="w-8 h-8 rounded-lg bg-brand-ink text-white text-[11px] font-extrabold flex items-center justify-center">
-          {monogram}
         </div>
       </div>
-
-      <ChatHeader venueName={venueName} order={order} />
-
-      <ReceiptCallback onView={onBack} />
 
       <div
         ref={scrollRef}
@@ -204,69 +188,6 @@ function OrderChatBody({
         onSendText={onSendText}
         onAttachImage={onAttachImage}
       />
-    </div>
-  );
-}
-
-function ChatHeader({ venueName, order }: { venueName: string; order: Order }) {
-  const line: LifecycleLine = lifecycleLabel(order);
-  const isTerminal = line.tone === "terminal";
-  const isSettled = line.tone === "settled";
-  const dotClass = isTerminal
-    ? "bg-red-500"
-    : isSettled
-      ? "bg-brand-muted"
-      : "bg-brand-green";
-
-  return (
-    <div className="px-4 py-3 border-b border-gray-100 bg-white">
-      <div className="text-[11px] font-bold uppercase tracking-wide text-brand-muted">
-        Chat with
-      </div>
-      <div className="text-[18px] font-extrabold text-brand-ink leading-tight">
-        {venueName}
-      </div>
-      <div className="mt-2 flex items-center gap-2">
-        <span
-          className={
-            "w-2 h-2 rounded-full flex-shrink-0 " +
-            dotClass +
-            (line.tone === "active" ? " animate-pulse" : "")
-          }
-          aria-hidden
-        />
-        <span
-          className={
-            "text-[12.5px] font-semibold leading-tight " +
-            (isTerminal ? "text-red-700" : "text-brand-ink")
-          }
-        >
-          {line.label}
-          {line.subLabel && (
-            <span className="font-normal text-brand-muted">
-              {" · "}
-              {line.subLabel}
-            </span>
-          )}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ReceiptCallback({ onView }: { onView: () => void }) {
-  return (
-    <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
-      <span className="text-emerald-700 text-[12px] font-bold">✓</span>
-      <span className="text-[12px] text-emerald-900 leading-tight flex-1">
-        Receipt sent to your WhatsApp.
-      </span>
-      <button
-        onClick={onView}
-        className="text-[11.5px] font-bold uppercase tracking-wide text-emerald-800 hover:underline"
-      >
-        View
-      </button>
     </div>
   );
 }

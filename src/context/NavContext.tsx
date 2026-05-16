@@ -14,6 +14,7 @@ export type Screen =
   | { name: "checkout" }
   | { name: "confirmation"; orderId?: string }
   | { name: "whatsapp"; orderId?: string }
+  | { name: "orderTracking"; orderId: string }
   | { name: "orderChat"; orderId: string };
 
 type NavContextValue = {
