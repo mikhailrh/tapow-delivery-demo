@@ -24,9 +24,67 @@ export type OrderLineSnapshot = {
 export type StatusUpdate = {
   at: number;
   text: string;
-  /** True for free-text messages from the kitchen (vs system status events). */
+  /**
+   * Legacy flag. Free-text chat is now in `Order.messages`; system events here
+   * never set it. Kept on the type so older persisted state still parses.
+   */
   fromVendor?: boolean;
 };
+
+/**
+ * Two-way chat message attached to an Order. Both vendor and customer
+ * write to the same array; render side derives from `from`.
+ */
+export type OrderMessage = {
+  id: string;
+  from: "vendor" | "customer";
+  /** Optional if the message is image-only. */
+  text?: string;
+  /**
+   * Compressed JPEG data URL. Demo-only — production moves to Supabase
+   * object storage (URL, not data URL). See CLAUDE.md "Future / not built yet".
+   */
+  image?: string;
+  at: number;
+};
+
+/**
+ * Opt-in review the customer promoted from a post-delivery chat message.
+ * Demo-only — see CLAUDE.md for the production review-system plan.
+ */
+export type OrderReview = {
+  rating: 1 | 2 | 3 | 4 | 5;
+  text: string;
+  promotedFromMessageId: string;
+  at: number;
+};
+
+/**
+ * How long the chat stays open after delivery so the customer can leave
+ * feedback. Beyond this, the thread renders read-only.
+ */
+export const POST_DELIVERY_CHAT_WINDOW_MS = 4 * 60 * 60 * 1000;
+
+/**
+ * Hard ceiling on image attachments per order thread (combined customer +
+ * vendor). The cap exists because images sit in localStorage as data URLs;
+ * see CLAUDE.md "Future / not built yet — image storage" for production.
+ */
+export const MAX_IMAGES_PER_THREAD = 2;
+
+/** Count images currently in an order's message thread. */
+export function countThreadImages(order: Order): number {
+  return (order.messages ?? []).reduce(
+    (n, m) => n + (m.image ? 1 : 0),
+    0,
+  );
+}
+
+export type ChatPhase =
+  | "pre-pickup"
+  | "in-transit"
+  | "post-delivery"
+  | "closed";
 
 export type Driver = {
   name: string;
@@ -88,7 +146,91 @@ export type Order = {
   refund?: Refund;
   driver?: Driver;
   statusUpdates: StatusUpdate[];
+  /** Two-way chat thread. Empty array on fresh orders. */
+  messages: OrderMessage[];
+  /** Opt-in review promoted from a post-delivery chat message. */
+  review?: OrderReview;
 };
+
+export type LifecycleTone = "active" | "settled" | "terminal";
+
+export type LifecycleLine = {
+  /** Short label for the pinned status strip. */
+  label: string;
+  /** Optional second-line context (venue name, ETA, etc.). */
+  subLabel?: string;
+  /** Visual emphasis — "active" while the order is in motion. */
+  tone: LifecycleTone;
+  /** Mirrors `getChatPhase` so callers don't recompute. */
+  phase: ChatPhase;
+};
+
+/**
+ * Single-line label for the order-status anchor that sits above the chat
+ * thread. Strictly a surface of `OrderStatus` + `fulfillment` — does NOT
+ * imply live rider tracking, which is a separate future surface.
+ */
+export function lifecycleLabel(
+  order: Order,
+  now: number = Date.now(),
+): LifecycleLine {
+  const phase = getChatPhase(order, now);
+  switch (order.status) {
+    case "incoming":
+      return { label: "Order received", tone: "active", phase };
+    case "cooking":
+      return { label: "Cooking now", tone: "active", phase };
+    case "ready":
+      return order.fulfillment === "delivery"
+        ? { label: "Out for delivery", tone: "active", phase }
+        : { label: "Ready for pickup", tone: "active", phase };
+    case "collected":
+      return order.fulfillment === "delivery"
+        ? {
+            label: "Delivered",
+            subLabel:
+              phase === "post-delivery" ? "How was it?" : undefined,
+            tone: phase === "post-delivery" ? "active" : "settled",
+            phase,
+          }
+        : {
+            label: "Collected",
+            subLabel:
+              phase === "post-delivery" ? "How was it?" : undefined,
+            tone: phase === "post-delivery" ? "active" : "settled",
+            phase,
+          };
+    case "rejected":
+      return { label: "Cancelled by venue", tone: "terminal", phase };
+    case "cancelled":
+      return { label: "Cancelled", tone: "terminal", phase };
+  }
+}
+
+/**
+ * Returns the chat-phase the order is in right now. Drives the framing the
+ * status line shows above the thread and whether the customer can still
+ * promote messages to reviews.
+ */
+export function getChatPhase(order: Order, now: number = Date.now()): ChatPhase {
+  if (
+    order.status === "incoming" ||
+    order.status === "cooking" ||
+    (order.status === "ready" && order.fulfillment === "pickup")
+  ) {
+    return "pre-pickup";
+  }
+  if (order.status === "ready" && order.fulfillment === "delivery") {
+    return "in-transit";
+  }
+  if (order.status === "collected" && order.collectedAt !== undefined) {
+    return now - order.collectedAt <= POST_DELIVERY_CHAT_WINDOW_MS
+      ? "post-delivery"
+      : "closed";
+  }
+  // rejected / cancelled — thread is closed.
+  return "closed";
+}
 
 export function snapshotLines(lines: CartLine[]): OrderLineSnapshot[] {
   return lines.map((l) => ({

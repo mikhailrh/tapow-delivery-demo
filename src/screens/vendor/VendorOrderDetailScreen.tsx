@@ -268,7 +268,7 @@ export default function VendorOrderDetailScreen({
           shortId={order.shortId}
           onClose={() => setMessageOpen(false)}
           onSend={(text) => {
-            sendVendorMessage(order.id, text);
+            sendVendorMessage(order.id, { text });
             setMessageOpen(false);
           }}
         />

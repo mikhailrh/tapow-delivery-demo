@@ -17,6 +17,7 @@ import {
   type Driver,
   type Order,
   type OrderLineSnapshot,
+  type OrderMessage,
   type OrderStatus,
   type RefundReason,
 } from "../lib/orders";
@@ -28,7 +29,24 @@ import { useVenue } from "./VenueContext";
 import type { Venue } from "../data/venues";
 
 const KEY = "orders.v1";
-const SEED_FLAG_SUFFIX = "everSeeded.v3";
+// Bumped to v4 with the `messages`/`review` Order fields; pre-v4 seeds
+// re-populate on next load so existing browsers don't show stale data.
+const SEED_FLAG_SUFFIX = "everSeeded.v4";
+
+/** Demo-only id generator — fine for client-side ordering of chat messages. */
+function newMessageId(): string {
+  return (
+    "m_" +
+    Date.now().toString(36) +
+    "_" +
+    Math.random().toString(36).slice(2, 8)
+  );
+}
+
+export type ChatPayload = {
+  text?: string;
+  image?: string;
+};
 
 type OrdersState = {
   orders: Order[];
@@ -70,8 +88,25 @@ type OrdersContextValue = {
   cancelOrder: (id: string) => void;
   /** Vendor pushes prep time out by N minutes; statusUpdate to customer. */
   pushBackEta: (id: string, addMinutes: number) => void;
-  /** Free-text message from the kitchen to the customer. */
-  sendVendorMessage: (id: string, text: string) => void;
+  /**
+   * Free-text and/or image message from the kitchen to the customer.
+   * Writes to `Order.messages` (the two-way chat thread), NOT `statusUpdates`.
+   */
+  sendVendorMessage: (id: string, payload: ChatPayload) => void;
+  /**
+   * Customer-side counterpart of `sendVendorMessage`. Same `messages` array.
+   */
+  sendCustomerMessage: (id: string, payload: ChatPayload) => void;
+  /**
+   * Opt-in: customer promotes one of their own post-delivery messages into a
+   * review (stars + the message's text). No-op if the message isn't theirs,
+   * doesn't exist, or the post-delivery window has closed.
+   */
+  promoteMessageToReview: (
+    id: string,
+    messageId: string,
+    rating: 1 | 2 | 3 | 4 | 5,
+  ) => void;
   /** Issue a partial/full refund. Status flips pending → processed after a 2s mock delay. */
   issueRefund: (
     id: string,
@@ -104,8 +139,15 @@ type OrdersContextValue = {
 
 const OrdersContext = createContext<OrdersContextValue | null>(null);
 
+/** Fill defaults for fields added after orders.v1's original shape. */
+function normalizeOrder(o: Order): Order {
+  if (o.messages) return o;
+  return { ...o, messages: [] };
+}
+
 function read(): OrdersState {
-  return loadJSON(KEY, empty);
+  const raw = loadJSON(KEY, empty);
+  return { ...raw, orders: raw.orders.map(normalizeOrder) };
 }
 
 function commit(s: OrdersState) {
@@ -187,6 +229,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
               text: `Order received — waiting for ${venue.name} to confirm.`,
             },
           ],
+          messages: [],
         };
         created = order;
         return { orders: [...prev.orders, order], nextOrderNum: num + 1 };
@@ -362,22 +405,66 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
-  const sendVendorMessage = useCallback<
-    OrdersContextValue["sendVendorMessage"]
-  >(
-    (id, text) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
+  const appendMessage = useCallback(
+    (id: string, from: OrderMessage["from"], payload: ChatPayload) => {
+      const text = payload.text?.trim();
+      const image = payload.image;
+      if (!text && !image) return;
+      const message: OrderMessage = {
+        id: newMessageId(),
+        from,
+        ...(text ? { text } : {}),
+        ...(image ? { image } : {}),
+        at: Date.now(),
+      };
       update((prev) => ({
         ...prev,
         orders: prev.orders.map((o) => {
           if (o.id !== id) return o;
           return {
             ...o,
-            statusUpdates: [
-              ...o.statusUpdates,
-              { at: Date.now(), text: trimmed, fromVendor: true },
-            ],
+            messages: [...(o.messages ?? []), message],
+          };
+        }),
+      }));
+    },
+    [update],
+  );
+
+  const sendVendorMessage = useCallback<
+    OrdersContextValue["sendVendorMessage"]
+  >(
+    (id, payload) => appendMessage(id, "vendor", payload),
+    [appendMessage],
+  );
+
+  const sendCustomerMessage = useCallback<
+    OrdersContextValue["sendCustomerMessage"]
+  >(
+    (id, payload) => appendMessage(id, "customer", payload),
+    [appendMessage],
+  );
+
+  const promoteMessageToReview = useCallback<
+    OrdersContextValue["promoteMessageToReview"]
+  >(
+    (id, messageId, rating) => {
+      update((prev) => ({
+        ...prev,
+        orders: prev.orders.map((o) => {
+          if (o.id !== id) return o;
+          const msg = (o.messages ?? []).find((m) => m.id === messageId);
+          if (!msg || msg.from !== "customer") return o;
+          const text = msg.text?.trim();
+          if (!text) return o;
+          return {
+            ...o,
+            review: {
+              rating,
+              text,
+              promotedFromMessageId: messageId,
+              at: Date.now(),
+            },
           };
         }),
       }));
@@ -406,7 +493,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
               {
                 at: requestedAt,
                 text: `Refund of RM${amount.toFixed(2)} processing — back to your card in 3–5 business days. Reason: ${reason.toLowerCase()}.`,
-                fromVendor: true,
               },
             ],
           };
@@ -471,7 +557,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
               {
                 at: now,
                 text: trimmedSummary,
-                fromVendor: true,
               },
             ],
           };
@@ -484,6 +569,11 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           ...prev,
           orders: prev.orders.map((o) => {
             if (o.id !== id) return o;
+            // `requestedAt` is the timestamp the refund-announcement bubble
+            // carries — kept identical so the customer-side refund pill can
+            // anchor on `statusUpdate.at === refund.requestedAt` instead of
+            // sniffing message text.
+            const announceAt = now + 1;
             return {
               ...o,
               refund: {
@@ -491,14 +581,13 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
                 reason: "Out of stock",
                 note: "Order edited by kitchen",
                 status: "pending",
-                requestedAt: now,
+                requestedAt: announceAt,
               },
               statusUpdates: [
                 ...o.statusUpdates,
                 {
-                  at: now + 1,
+                  at: announceAt,
                   text: `Partial refund of RM${refundAmount.toFixed(2)} processing — back to your card in 3–5 business days.`,
-                  fromVendor: true,
                 },
               ],
             };
@@ -570,6 +659,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       cancelOrder,
       pushBackEta,
       sendVendorMessage,
+      sendCustomerMessage,
+      promoteMessageToReview,
       issueRefund,
       applyOrderEdits,
       setStatus,
@@ -588,6 +679,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       cancelOrder,
       pushBackEta,
       sendVendorMessage,
+      sendCustomerMessage,
+      promoteMessageToReview,
       issueRefund,
       applyOrderEdits,
       setStatus,
@@ -979,7 +1072,12 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
   // ------------------------------------------------------------------
   // Build & sort
   // ------------------------------------------------------------------
-  type Built = { placedAt: number; build: (shortId: string) => Order };
+  // `messages` is filled in post-build by `normalizeOrder` so the per-literal
+  // build callbacks below don't have to repeat `messages: []` in each return.
+  type Built = {
+    placedAt: number;
+    build: (shortId: string) => Omit<Order, "messages">;
+  };
   const builders: Built[] = [];
 
   // History (terminal)
@@ -1227,13 +1325,50 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
 
   builders.sort((a, b) => a.placedAt - b.placedAt);
   const orders = builders.map((b, i) =>
-    b.build(String(i + 1).padStart(3, "0")),
+    normalizeOrder(b.build(String(i + 1).padStart(3, "0")) as Order),
   );
+
+  // Seed a chat thread on the most-recent collected delivery order so the
+  // vendor's Messages surface lands populated for the pitch. Demo data only —
+  // the exchange is hand-written, not generated.
+  seedFowlBoysChat(orders);
 
   // History only keeps the past 7 days; live orders are always within minutes
   const cutoff = now - 7 * 24 * HOUR;
   const filtered = orders.filter((o) => o.placedAt >= cutoff);
   return { orders: filtered, nextOrderNum: filtered.length + 1 };
+}
+
+/**
+ * Mutates one collected order in-place to carry the canonical
+ * "out of crack fries → sub waffle fries → yes please" exchange. Picks the
+ * most recent collected delivery order that actually has Crack Fries on it
+ * so the conversation reads naturally to a viewer inspecting the line items.
+ */
+function seedFowlBoysChat(orders: Order[]) {
+  const target = orders.find(
+    (o) =>
+      o.status === "collected" &&
+      o.fulfillment === "delivery" &&
+      o.lines.some((l) => l.itemName.toLowerCase().includes("crack fries")),
+  );
+  if (!target || !target.acceptedAt) return;
+  const t1 = target.acceptedAt + 5 * 60_000;
+  const t2 = target.acceptedAt + 7 * 60_000;
+  target.messages = [
+    {
+      id: "seed_crackfries_v",
+      from: "vendor",
+      text: "Hey — turns out we just ran out of crack fries. Cool to sub waffle fries (same price)? Sorry about that!",
+      at: t1,
+    },
+    {
+      id: "seed_crackfries_c",
+      from: "customer",
+      text: "Yes please 👍",
+      at: t2,
+    },
+  ];
 }
 
 // Stable name → integer hash so the same customer always lands the same driver
@@ -1369,7 +1504,12 @@ function buildGenericSeed(venue: Venue): OrdersState {
 
   const localAddresses = [`Near ${venue.address.split(",")[1]?.trim() ?? venue.address}`];
 
-  type Built = { placedAt: number; build: (shortId: string) => Order };
+  // `messages` is filled in post-build by `normalizeOrder` so the per-literal
+  // build callbacks below don't have to repeat `messages: []` in each return.
+  type Built = {
+    placedAt: number;
+    build: (shortId: string) => Omit<Order, "messages">;
+  };
   const builders: Built[] = [];
 
   for (const def of historyDefs) {
@@ -1584,7 +1724,9 @@ function buildGenericSeed(venue: Venue): OrdersState {
   }
 
   builders.sort((a, b) => a.placedAt - b.placedAt);
-  const orders = builders.map((b, i) => b.build(String(i + 1).padStart(3, "0")));
+  const orders = builders.map((b, i) =>
+    normalizeOrder(b.build(String(i + 1).padStart(3, "0")) as Order),
+  );
 
   const cutoff = now - 7 * 24 * HOUR;
   const filtered = orders.filter((o) => o.placedAt >= cutoff);
