@@ -24,7 +24,12 @@ import { BackIcon, PaperclipIcon } from "../components/icons";
  */
 export default function OrderChatScreen({ orderId }: { orderId: string }) {
   const { back, go } = useNav();
-  const { getById, sendCustomerMessage, promoteMessageToReview } = useOrders();
+  const {
+    getById,
+    sendCustomerMessage,
+    promoteMessageToReview,
+    markPartyRead,
+  } = useOrders();
   const venue = useVenue();
   const stable = getById(orderId);
 
@@ -56,6 +61,7 @@ export default function OrderChatScreen({ orderId }: { orderId: string }) {
       onPromote={(messageId, rating) =>
         promoteMessageToReview(stable.id, messageId, rating)
       }
+      onMarkPartyRead={() => markPartyRead(stable.id, "customer")}
     />
   );
 }
@@ -84,6 +90,7 @@ function OrderChatBody({
   onSendText,
   onAttachImage,
   onPromote,
+  onMarkPartyRead,
 }: {
   order: Order;
   venueName: string;
@@ -91,6 +98,7 @@ function OrderChatBody({
   onSendText: (text: string) => void;
   onAttachImage: (file: File) => Promise<string | null>;
   onPromote: (messageId: string, rating: 1 | 2 | 3 | 4 | 5) => void;
+  onMarkPartyRead: () => void;
 }) {
   const messages = order.messages ?? [];
   const chatPhase: ChatPhase = getChatPhase(order);
@@ -109,9 +117,14 @@ function OrderChatBody({
 
   // While the user is at the bottom, advance lastSeenAt so new bubbles arriving
   // in view are not treated as unread. Banner only fires when scrolled away.
+  // Also bumps the cross-party read receipt (Order.lastReadAtCustomer) so the
+  // vendor's blue read-tick can flip — broadcasts via the existing Order sync.
   useEffect(() => {
-    if (isAtBottom) setLastSeenAt(Date.now());
-  }, [isAtBottom, messages.length]);
+    if (isAtBottom) {
+      setLastSeenAt(Date.now());
+      onMarkPartyRead();
+    }
+  }, [isAtBottom, messages.length, onMarkPartyRead]);
 
   const unreadVendor = useMemo(() => {
     const out: OrderMessage[] = [];
@@ -258,11 +271,16 @@ function CustomerThreadRow({
           )}
           <div
             className={
-              "text-[10px] text-right mt-1 -mb-0.5 " +
+              "text-[10px] text-right mt-1 -mb-0.5 flex items-center justify-end gap-1 " +
               (isCustomer ? "text-white/60" : "text-brand-muted")
             }
           >
-            {formatTime(message.at)}
+            <span>{formatTime(message.at)}</span>
+            {isCustomer && (
+              <ReadTick
+                isRead={message.at <= (order.lastReadAtVendor ?? 0)}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -275,6 +293,25 @@ function CustomerThreadRow({
         />
       )}
     </>
+  );
+}
+
+/**
+ * Single ✓ when sent, double ✓✓ when the vendor has caught up via
+ * `markPartyRead("vendor")`. Demo-only single-browser-accurate; production
+ * needs the same backend transport as cross-device chat delivery.
+ */
+function ReadTick({ isRead }: { isRead: boolean }) {
+  return (
+    <span
+      aria-label={isRead ? "Read" : "Sent"}
+      className={
+        "font-semibold tracking-tighter " +
+        (isRead ? "text-sky-300" : "text-white/55")
+      }
+    >
+      {isRead ? "✓✓" : "✓"}
+    </span>
   );
 }
 

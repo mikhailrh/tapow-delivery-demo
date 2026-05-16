@@ -27,12 +27,15 @@ import {
 } from "../lib/money";
 import { useVenue } from "./VenueContext";
 import type { Venue } from "../data/venues";
+import { markChatRead } from "../lib/vendorReadState";
 
 const KEY = "orders.v1";
 // Bumped on any persisted-Order shape change so older browsers re-seed once
 // instead of rendering stale data. v4: messages/review fields. v5: 10%
-// serviceCharge → 1% platformFee (field rename + rate correction).
-const SEED_FLAG_SUFFIX = "everSeeded.v5";
+// serviceCharge → 1% platformFee (field rename + rate correction). v6: cross-
+// party read-receipt fields (lastReadAtVendor / lastReadAtCustomer) + the
+// Sara T. unread-message seed.
+const SEED_FLAG_SUFFIX = "everSeeded.v6";
 
 /** Demo-only id generator — fine for client-side ordering of chat messages. */
 function newMessageId(): string {
@@ -108,6 +111,14 @@ type OrdersContextValue = {
     messageId: string,
     rating: 1 | 2 | 3 | 4 | 5,
   ) => void;
+  /**
+   * Cross-party read-receipt — bumps `lastReadAtVendor` or `lastReadAtCustomer`
+   * to now. Monotonic. Broadcasts via the existing Order sync so the other
+   * party's blue tick can flip in real time. Distinct from
+   * [vendorReadState.markChatRead](src/lib/vendorReadState.ts) which drives
+   * the per-tab kebab badge and is deliberately NOT broadcast.
+   */
+  markPartyRead: (id: string, from: "vendor" | "customer") => void;
   /** Issue a partial/full refund. Status flips pending → processed after a 2s mock delay. */
   issueRefund: (
     id: string,
@@ -473,6 +484,25 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
+  const markPartyRead = useCallback<OrdersContextValue["markPartyRead"]>(
+    (id, from) => {
+      const now = Date.now();
+      update((prev) => ({
+        ...prev,
+        orders: prev.orders.map((o) => {
+          if (o.id !== id) return o;
+          const field =
+            from === "vendor" ? "lastReadAtVendor" : "lastReadAtCustomer";
+          // Monotonic — never go backwards. Drops silent no-op writes when
+          // an effect fires repeatedly while at the bottom of the thread.
+          if ((o[field] ?? 0) >= now) return o;
+          return { ...o, [field]: now };
+        }),
+      }));
+    },
+    [update],
+  );
+
   const issueRefund = useCallback<OrdersContextValue["issueRefund"]>(
     (id, amount, reason, note) => {
       const requestedAt = Date.now();
@@ -662,6 +692,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       sendVendorMessage,
       sendCustomerMessage,
       promoteMessageToReview,
+      markPartyRead,
       issueRefund,
       applyOrderEdits,
       setStatus,
@@ -682,6 +713,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       sendVendorMessage,
       sendCustomerMessage,
       promoteMessageToReview,
+      markPartyRead,
       issueRefund,
       applyOrderEdits,
       setStatus,
@@ -1334,6 +1366,13 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
   // the exchange is hand-written, not generated.
   seedFowlBoysChat(orders);
 
+  // Seed one currently-cooking order with an unread customer message so the
+  // vendor-side unread roll-up (banner + per-card chip) AND the grey-vs-blue
+  // tick distinction both have something live to show in the demo. The
+  // crack-fries exchange above is intentionally fully-read (past completed
+  // order); this one is intentionally unread.
+  seedFowlBoysUnreadCustomerMessage(orders, now);
+
   // History only keeps the past 7 days; live orders are always within minutes
   const cutoff = now - 7 * 24 * HOUR;
   const filtered = orders.filter((o) => o.placedAt >= cutoff);
@@ -1345,6 +1384,11 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
  * "out of crack fries → sub waffle fries → yes please" exchange. Picks the
  * most recent collected delivery order that actually has Crack Fries on it
  * so the conversation reads naturally to a viewer inspecting the line items.
+ *
+ * Both `lastReadAtVendor` and `lastReadAtCustomer` are pre-set past the
+ * latest message so the seeded exchange renders as fully-read (blue double-
+ * tick on every outgoing bubble) — the correct visual for a past, completed
+ * order.
  */
 function seedFowlBoysChat(orders: Order[]) {
   const target = orders.find(
@@ -1370,6 +1414,52 @@ function seedFowlBoysChat(orders: Order[]) {
       at: t2,
     },
   ];
+  const readMark = t2 + 60_000;
+  target.lastReadAtVendor = readMark;
+  target.lastReadAtCustomer = readMark;
+  // Per-tab vendorLastReadAt drives the kebab badge + banner roll-up. Bump
+  // it so the seeded crack-fries exchange (a completed past order) doesn't
+  // contribute to the demo's live unread count — that belongs to the Sara T.
+  // seed below.
+  markChatRead(target.id, readMark);
+}
+
+/**
+ * Mutates the cooking pickup order (Sara T. — Chicken & Waffle + Lemonade,
+ * ~13 min into a 25-min prep) so it lands with one unread inbound customer
+ * message. Drives the live-demo affordances:
+ *  - vendor-side unread roll-up (banner aggregate + per-card chip — both
+ *    sourced from the per-tab vendorLastReadAt map, which is intentionally
+ *    not bumped here)
+ *  - grey ✓ tick on the customer's own bubble while the vendor hasn't read
+ *    yet; flips to blue ✓✓ in real-time when the vendor opens the chat
+ *    sheet (via `markPartyRead("vendor")` → BroadcastChannel → other-tab
+ *    re-render).
+ *
+ * Pickup status was chosen on purpose: cleaner card (no driver block) so
+ * the unread chip + tick distinction stay visually unambiguous in the demo.
+ */
+function seedFowlBoysUnreadCustomerMessage(orders: Order[], now: number) {
+  const target = orders.find(
+    (o) =>
+      o.status === "cooking" &&
+      o.fulfillment === "pickup" &&
+      o.customerName.startsWith("Sara"),
+  );
+  if (!target) return;
+  const at = now - 2 * 60_000;
+  target.messages = [
+    {
+      id: "seed_unread_sara_c",
+      from: "customer",
+      text: "Hey, can I add maple syrup on the side? Forgot to ask 🙏",
+      at,
+    },
+  ];
+  // Customer "saw" their own message (they sent it); vendor has NOT.
+  target.lastReadAtCustomer = at + 500;
+  // lastReadAtVendor intentionally left unset → grey ✓ on the customer's
+  // outgoing bubble in OrderChatScreen until the vendor opens the thread.
 }
 
 // Stable name → integer hash so the same customer always lands the same driver

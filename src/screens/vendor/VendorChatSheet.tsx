@@ -41,15 +41,20 @@ export default function VendorChatSheet({
   orderId: string;
   onClose: () => void;
 }) {
-  const { getById, sendVendorMessage } = useOrders();
+  const { getById, sendVendorMessage, markPartyRead } = useOrders();
   const order = getById(orderId);
 
-  // Auto-mark-read on every render where the message count changes — keeps
-  // the badge in sync while the sheet is open without needing a focus model.
+  // Auto-mark-read on every render where the message count changes. Both
+  // signals fire together but mean different things:
+  //   - markChatRead   → per-tab vendorLastReadAt → clears the kebab badge
+  //                      + banner roll-up on THIS tab only (not broadcast).
+  //   - markPartyRead  → cross-party Order.lastReadAtVendor → broadcasts so
+  //                      the customer's blue read-tick can flip in real time.
   useEffect(() => {
     if (!order) return;
     markChatRead(order.id);
-  }, [order?.id, order?.messages?.length]);
+    markPartyRead(order.id, "vendor");
+  }, [order?.id, order?.messages?.length, markPartyRead]);
 
   if (!order) return null;
 
@@ -138,6 +143,10 @@ function ChatBody({ order }: { order: Order }) {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length]);
 
+  // Vendor's outgoing message is "read" once the customer's `lastReadAtCustomer`
+  // has caught up to its timestamp. Reads from the Order's cross-party field.
+  const customerReadAt = order.lastReadAtCustomer ?? 0;
+
   return (
     <div
       ref={scrollRef}
@@ -148,7 +157,11 @@ function ChatBody({ order }: { order: Order }) {
       ) : (
         <div className="flex flex-col gap-1.5">
           {messages.map((m) => (
-            <VendorBubble key={m.id} message={m} />
+            <VendorBubble
+              key={m.id}
+              message={m}
+              isRead={m.at <= customerReadAt}
+            />
           ))}
           <div ref={bottomRef} />
         </div>
@@ -168,7 +181,13 @@ function EmptyState() {
   );
 }
 
-function VendorBubble({ message }: { message: OrderMessage }) {
+function VendorBubble({
+  message,
+  isRead,
+}: {
+  message: OrderMessage;
+  isRead: boolean;
+}) {
   const isVendor = message.from === "vendor";
   const align = isVendor ? "justify-end" : "justify-start";
   const bubbleClass = isVendor
@@ -200,14 +219,44 @@ function VendorBubble({ message }: { message: OrderMessage }) {
         )}
         <div
           className={
-            "text-[10px] text-right mt-1 -mb-0.5 " +
+            "text-[10px] text-right mt-1 -mb-0.5 flex items-center justify-end gap-1 " +
             (isVendor ? "text-white/60" : "text-brand-muted")
           }
         >
-          {formatTime(message.at)}
+          <span>{formatTime(message.at)}</span>
+          {isVendor && <ReadTick isRead={isRead} onDark />}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Single ✓ when sent, double ✓✓ when the other party has caught up to this
+ * message via `markPartyRead`. Demo-only single-browser-accurate; production
+ * needs the same backend transport as cross-device chat delivery.
+ */
+function ReadTick({
+  isRead,
+  onDark,
+}: {
+  isRead: boolean;
+  onDark: boolean;
+}) {
+  const colorClass = isRead
+    ? onDark
+      ? "text-sky-300"
+      : "text-sky-500"
+    : onDark
+      ? "text-white/55"
+      : "text-brand-muted";
+  return (
+    <span
+      aria-label={isRead ? "Read" : "Sent"}
+      className={"font-semibold tracking-tighter " + colorClass}
+    >
+      {isRead ? "✓✓" : "✓"}
+    </span>
   );
 }
 

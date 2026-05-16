@@ -154,6 +154,19 @@ export type Order = {
   statusUpdates: StatusUpdate[];
   /** Two-way chat thread. Empty array on fresh orders. */
   messages: OrderMessage[];
+  /**
+   * Last time any vendor-side surface opened this chat (broadcast cross-tab).
+   * Drives the customer's blue read-tick. Distinct from the per-tab
+   * `vendorLastReadAt` in [vendorReadState.ts](src/lib/vendorReadState.ts),
+   * which drives the kitchen tablet's badge/chip locally and is deliberately
+   * NOT broadcast.
+   */
+  lastReadAtVendor?: number;
+  /**
+   * Last time the customer scrolled to the bottom of the chat (broadcast
+   * cross-tab). Drives the vendor's blue read-tick.
+   */
+  lastReadAtCustomer?: number;
   /** Opt-in review promoted from a post-delivery chat message. */
   review?: OrderReview;
 };
