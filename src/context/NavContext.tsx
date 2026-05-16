@@ -13,7 +13,8 @@ export type Screen =
   | { name: "cart" }
   | { name: "checkout" }
   | { name: "confirmation"; orderId?: string }
-  | { name: "whatsapp"; orderId?: string };
+  | { name: "whatsapp"; orderId?: string }
+  | { name: "orderChat"; orderId: string };
 
 type NavContextValue = {
   screen: Screen;
