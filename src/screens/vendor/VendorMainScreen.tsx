@@ -20,8 +20,12 @@ import RejectModal from "./RejectModal";
 import EditOrderSheet from "./EditOrderSheet";
 import VendorChatSheet from "./VendorChatSheet";
 import { UndoSnackbar, type UndoToast, newToastId } from "../../components/UndoSnackbar";
-import type { Order } from "../../lib/orders";
-import { useChatUnreadCount } from "../../lib/vendorReadState";
+import { digitsOnly, type Order } from "../../lib/orders";
+import {
+  useChatUnreadCount,
+  useTotalChatUnread,
+} from "../../lib/vendorReadState";
+import { PhoneIcon } from "../../components/icons";
 import { useStock } from "../../context/StockContext";
 import { useVenue } from "../../context/VenueContext";
 
@@ -67,6 +71,17 @@ export default function VendorMainScreen() {
   const ready = orders.filter(
     (o) => o.status === "ready" || (o.status === "collected" && !collectedCardsHidden.has(o.id)),
   );
+
+  // Unread roll-up — banner aggregate + per-tab dots. Same source as the
+  // per-card chip (useChatUnreadCount in vendorReadState); each bucket
+  // subscribes to the same store independently. By design the count only
+  // covers what's currently on the kanban: history orders and post-
+  // delivery-hidden cards aren't reachable from this surface, so they
+  // don't contribute to the find-it pyramid (banner → tab dot → chip).
+  const incomingUnread = useTotalChatUnread(incoming);
+  const cookingUnread = useTotalChatUnread(cooking);
+  const readyUnread = useTotalChatUnread(ready);
+  const totalUnread = incomingUnread + cookingUnread + readyUnread;
 
   // Today's snapshot
   const todayMidnight = useMemo(() => {
@@ -224,10 +239,13 @@ export default function VendorMainScreen() {
         ordersCount={todaysOrders.length}
         cookingCount={cooking.length}
         readyCount={ready.filter((o) => o.status === "ready").length}
+        unreadMessages={totalUnread}
         storeStatus={storeState}
       />
 
-      {/* Mobile tab bar (single column on phones) */}
+      {/* Mobile tab bar (single column on phones). Red dot next to a tab
+          label signals that bucket has ≥1 order with an unread customer
+          message — the bucket-level layer of the find-it pyramid. */}
       <div className="lg:hidden border-b border-gray-200 bg-white">
         <div className="flex">
           <TabButton
@@ -236,6 +254,7 @@ export default function VendorMainScreen() {
             active={activeTab === "incoming"}
             onClick={() => setActiveTab("incoming")}
             accent="text-brand-green"
+            hasUnread={incomingUnread > 0}
           />
           <TabButton
             label="Cooking"
@@ -243,6 +262,7 @@ export default function VendorMainScreen() {
             active={activeTab === "cooking"}
             onClick={() => setActiveTab("cooking")}
             accent="text-amber-600"
+            hasUnread={cookingUnread > 0}
           />
           <TabButton
             label="Ready"
@@ -250,6 +270,7 @@ export default function VendorMainScreen() {
             active={activeTab === "ready"}
             onClick={() => setActiveTab("ready")}
             accent="text-blue-600"
+            hasUnread={readyUnread > 0}
           />
         </div>
       </div>
@@ -880,11 +901,13 @@ function SnapshotBanner({
   ordersCount,
   cookingCount,
   readyCount,
+  unreadMessages,
   storeStatus,
 }: {
   ordersCount: number;
   cookingCount: number;
   readyCount: number;
+  unreadMessages: number;
   storeStatus: ReturnType<typeof useStore>["state"];
 }) {
   // Operational only — revenue lives on the manager phone.
@@ -897,18 +920,37 @@ function SnapshotBanner({
         value={`${cookingCount} cooking · ${readyCount} ready`}
       />
       <Divider />
+      <Stat
+        label="Messages"
+        value={String(unreadMessages)}
+        muted={unreadMessages === 0}
+      />
+      <Divider />
       <Stat label="Store" value={storeChipLabel(storeStatus)} />
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
   return (
     <div className="min-w-0">
       <div className="text-[10px] text-white/50 uppercase tracking-wide leading-none">
         {label}
       </div>
-      <div className="text-[13.5px] font-bold leading-tight truncate">
+      <div
+        className={
+          "text-[13.5px] font-bold leading-tight truncate " +
+          (muted ? "text-white/40" : "")
+        }
+      >
         {value}
       </div>
     </div>
@@ -929,12 +971,14 @@ function TabButton({
   active,
   onClick,
   accent,
+  hasUnread = false,
 }: {
   label: string;
   count: number;
   active: boolean;
   onClick: () => void;
   accent: string;
+  hasUnread?: boolean;
 }) {
   return (
     <button
@@ -946,7 +990,15 @@ function TabButton({
           : "text-brand-muted border-transparent")
       }
     >
-      {label}
+      <span className="relative">
+        {label}
+        {hasUnread && (
+          <span
+            aria-label="Has unread messages"
+            className="absolute -top-0.5 -right-2.5 w-1.5 h-1.5 rounded-full bg-red-500"
+          />
+        )}
+      </span>
       <span
         className={
           "inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold " +
@@ -1032,19 +1084,42 @@ function RailButton({
 
 type KanbanCardProps = Omit<
   React.ComponentProps<typeof VendorOrderCard>,
-  "menuItems" | "unreadChatCount"
+  "menuItems" | "unreadChatCount" | "onOpenMessages"
 > & {
   baseMenuItems?: CardMenuItem[];
   onOpenChat: (o: Order) => void;
 };
 
 /**
- * Card wrapper that injects a "Messages" kebab action with an unread-count
- * suffix and badges the kebab with the live unread count from
- * [src/lib/vendorReadState.ts](src/lib/vendorReadState.ts).
+ * Card wrapper that injects two comms items at the top of the kebab —
+ * "Messages · N" (in-platform chat thread) and "Call via WhatsApp"
+ * (external WhatsApp deep-link, used to escalate to a real call/text
+ * via the customer's WhatsApp). Two distinct wires:
+ *   - Messages → opens VendorChatSheet via onOpenChat; counts roll up
+ *     through useChatUnreadCount + useTotalChatUnread.
+ *   - Call via WhatsApp → window.open(`wa.me/<digits>?text=...`); no
+ *     order-state interaction, no read-state, just an external link.
+ * Also feeds unreadChatCount to the card-face chip and the kebab badge.
  */
-function KanbanCard({ order, baseMenuItems, onOpenChat, ...rest }: KanbanCardProps) {
+function KanbanCard({
+  order,
+  baseMenuItems,
+  onOpenChat,
+  ...rest
+}: KanbanCardProps) {
+  const venue = useVenue();
   const unread = useChatUnreadCount(order);
+  const openWhatsApp = () => {
+    const phoneDigits = digitsOnly(order.customerPhone);
+    const greeting = encodeURIComponent(
+      `Hey ${order.customerName.split(" ")[0]}, it's ${venue.name} — `,
+    );
+    window.open(
+      `https://wa.me/${phoneDigits}?text=${greeting}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
   const menuItems: CardMenuItem[] = [
     {
       label:
@@ -1053,6 +1128,11 @@ function KanbanCard({ order, baseMenuItems, onOpenChat, ...rest }: KanbanCardPro
           : "Messages",
       onClick: () => onOpenChat(order),
     },
+    {
+      label: "Call via WhatsApp",
+      icon: <PhoneIcon className="w-4 h-4" />,
+      onClick: openWhatsApp,
+    },
     ...(baseMenuItems ?? []),
   ];
   return (
@@ -1060,6 +1140,7 @@ function KanbanCard({ order, baseMenuItems, onOpenChat, ...rest }: KanbanCardPro
       order={order}
       menuItems={menuItems}
       unreadChatCount={unread}
+      onOpenMessages={() => onOpenChat(order)}
       {...rest}
     />
   );

@@ -71,8 +71,30 @@ export function useChatUnreadCount(order: Order): number {
     () => state[order.id] ?? 0,
     () => state[order.id] ?? 0,
   );
-  return (order.messages ?? []).reduce(
-    (n, m) => n + (m.from === "customer" && m.at > lastRead ? 1 : 0),
-    0,
+  return countUnreadFor(order, lastRead);
+}
+
+/**
+ * Aggregate unread count across a list of orders. Used by the banner
+ * roll-up and per-tab bucketing (incoming / cooking / ready) on the
+ * vendor kanban. Returns the same module-state reference so callers can
+ * compose multiple instances cheaply — useSyncExternalStore dedupes.
+ */
+export function useTotalChatUnread(orders: Order[]): number {
+  const map = useSyncExternalStore(
+    subscribe,
+    () => state,
+    () => state,
   );
+  let total = 0;
+  for (const o of orders) total += countUnreadFor(o, map[o.id] ?? 0);
+  return total;
+}
+
+function countUnreadFor(order: Order, lastRead: number): number {
+  let n = 0;
+  for (const m of order.messages ?? []) {
+    if (m.from === "customer" && m.at > lastRead) n++;
+  }
+  return n;
 }

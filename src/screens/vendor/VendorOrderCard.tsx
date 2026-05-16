@@ -18,6 +18,8 @@ import {
 export type CardMenuItem = {
   label: string;
   tone?: "default" | "destructive";
+  /** Optional leading glyph rendered before the label inside the popover. */
+  icon?: React.ReactNode;
   onClick: () => void;
 };
 
@@ -31,6 +33,7 @@ export default function VendorOrderCard({
   rightAccessory,
   showDriver = false,
   unreadChatCount = 0,
+  onOpenMessages,
 }: {
   order: Order;
   /** First 500ms after a card lands in INCOMING. */
@@ -45,6 +48,9 @@ export default function VendorOrderCard({
   showDriver?: boolean;
   /** Count of customer messages newer than this tab's last-read timestamp. */
   unreadChatCount?: number;
+  /** Fires when the labelled card-face chip is tapped. Same handler as the
+   *  kebab's "Messages" menu item — the chip is a more legible affordance. */
+  onOpenMessages?: () => void;
 }) {
   const venue = useVenue();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -144,7 +150,7 @@ export default function VendorOrderCard({
                     onClick={() => setMenuOpen(false)}
                     className="fixed inset-0 z-20 cursor-default"
                   />
-                  <div className="absolute right-0 top-9 z-30 min-w-[180px] bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 overflow-hidden">
+                  <div className="absolute right-0 top-9 z-30 min-w-[200px] bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 overflow-hidden">
                     {menuItems.map((m, i) => (
                       <button
                         key={i}
@@ -153,13 +159,16 @@ export default function VendorOrderCard({
                           m.onClick();
                         }}
                         className={
-                          "block w-full text-left px-4 py-2.5 text-[13.5px] font-semibold hover:bg-brand-canvas/60 " +
+                          "w-full text-left px-4 py-2.5 text-[13.5px] font-semibold hover:bg-brand-canvas/60 flex items-center gap-2.5 " +
                           (m.tone === "destructive"
                             ? "text-red-600"
                             : "text-brand-ink")
                         }
                       >
-                        {m.label}
+                        {m.icon && (
+                          <span className="flex-shrink-0">{m.icon}</span>
+                        )}
+                        <span className="flex-1">{m.label}</span>
                       </button>
                     ))}
                   </div>
@@ -177,6 +186,27 @@ export default function VendorOrderCard({
           ) : null}
         </div>
       </div>
+
+      {/* Unread-messages chip — the labelled, card-face affordance the
+          spec calls out. Lives in addition to the kebab badge so the
+          vendor sees both WHAT (Messages, not just a red dot) and
+          HOW MANY without opening the kebab. */}
+      {unreadChatCount > 0 && onOpenMessages && (
+        <button
+          onClick={onOpenMessages}
+          className="mt-3 w-full flex items-center gap-2 bg-red-50 hover:bg-red-100 active:bg-red-100 transition-colors border border-red-200 rounded-lg px-2.5 py-1.5 text-left"
+          style={{ animation: "popIn 0.18s ease-out" }}
+        >
+          <MessageIcon className="w-3.5 h-3.5 text-red-700 flex-shrink-0" />
+          <span className="text-[12.5px] font-bold text-red-700 leading-tight">
+            Messages · {unreadChatCount > 9 ? "9+" : unreadChatCount}
+          </span>
+          <span className="flex-1" />
+          <span className="text-[10.5px] font-bold uppercase tracking-wide text-red-600/80 flex-shrink-0">
+            Open ›
+          </span>
+        </button>
+      )}
 
       {/* Items */}
       <ul className="mt-3 space-y-1.5">
@@ -251,25 +281,18 @@ export default function VendorOrderCard({
         </div>
       )}
 
-      {/* Footer: total + primary action */}
+      {/* Footer: total + prep countdown. The footer "WhatsApp customer"
+          chat-bubble icon used to live here — it visually collided with the
+          in-platform Messages affordance, so it moved into the kebab as
+          "Call via WhatsApp" with a PhoneIcon. See KanbanCard in
+          VendorMainScreen.tsx for that wire. */}
       <div className="mt-3 flex items-center justify-between gap-2">
         <div className="text-[15px] font-bold text-brand-ink tabular-nums">
           {formatRM(order.total)}
         </div>
-        <div className="flex items-center gap-2">
-          {isCooking && order.prepMinutes && (
-            <PrepCountdown order={order} now={now} />
-          )}
-          <a
-            href={waLink}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="WhatsApp customer"
-            className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center"
-          >
-            <MessageIcon className="w-4 h-4 text-brand-ink" />
-          </a>
-        </div>
+        {isCooking && order.prepMinutes && (
+          <PrepCountdown order={order} now={now} />
+        )}
       </div>
 
       {primaryAction && primaryLabel && !isCancelled && (
