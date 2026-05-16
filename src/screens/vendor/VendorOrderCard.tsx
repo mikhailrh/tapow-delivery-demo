@@ -30,6 +30,7 @@ export default function VendorOrderCard({
   menuItems,
   rightAccessory,
   showDriver = false,
+  unreadChatCount = 0,
 }: {
   order: Order;
   /** First 500ms after a card lands in INCOMING. */
@@ -42,6 +43,8 @@ export default function VendorOrderCard({
   menuItems?: CardMenuItem[];
   rightAccessory?: React.ReactNode;
   showDriver?: boolean;
+  /** Count of customer messages newer than this tab's last-read timestamp. */
+  unreadChatCount?: number;
 }) {
   const venue = useVenue();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -121,9 +124,18 @@ export default function VendorOrderCard({
               <button
                 onClick={() => setMenuOpen((o) => !o)}
                 aria-label="Order actions"
-                className="-mt-1 -mr-1 w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center flex-shrink-0"
+                className="-mt-1 -mr-1 w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center flex-shrink-0 relative"
               >
                 <KebabIcon className="w-5 h-5 text-brand-muted" />
+                {unreadChatCount > 0 && (
+                  <span
+                    aria-label={`${unreadChatCount} unread message${unreadChatCount > 1 ? "s" : ""}`}
+                    className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-white text-[9.5px] font-extrabold leading-none flex items-center justify-center"
+                    style={{ animation: "popIn 0.18s ease-out" }}
+                  >
+                    {unreadChatCount > 9 ? "9+" : unreadChatCount}
+                  </span>
+                )}
               </button>
               {menuOpen && (
                 <>

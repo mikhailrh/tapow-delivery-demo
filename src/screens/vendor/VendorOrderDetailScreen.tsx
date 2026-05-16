@@ -9,15 +9,16 @@ import {
 } from "../../components/icons";
 import { formatRM } from "../../lib/money";
 import { digitsOnly, type Order, type RefundReason } from "../../lib/orders";
+import VendorChatSheet from "./VendorChatSheet";
 
 export default function VendorOrderDetailScreen({
   orderId,
 }: {
   orderId: string;
 }) {
-  const { getById, sendVendorMessage, issueRefund } = useOrders();
+  const { getById, issueRefund } = useOrders();
   const { back } = useVendorNav();
-  const [messageOpen, setMessageOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const order = getById(orderId);
 
@@ -74,10 +75,10 @@ export default function VendorOrderDetailScreen({
               <PhoneIcon className="w-4 h-4" /> Call
             </a>
             <button
-              onClick={() => setMessageOpen(true)}
+              onClick={() => setChatOpen(true)}
               className="inline-flex items-center gap-1.5 bg-brand-ink text-white rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
             >
-              <MessageIcon className="w-4 h-4" /> Send message
+              <MessageIcon className="w-4 h-4" /> Messages
             </button>
           </div>
         </div>
@@ -263,14 +264,10 @@ export default function VendorOrderDetailScreen({
         />
       )}
 
-      {messageOpen && (
-        <SendMessageSheet
-          shortId={order.shortId}
-          onClose={() => setMessageOpen(false)}
-          onSend={(text) => {
-            sendVendorMessage(order.id, { text });
-            setMessageOpen(false);
-          }}
+      {chatOpen && (
+        <VendorChatSheet
+          orderId={order.id}
+          onClose={() => setChatOpen(false)}
         />
       )}
     </div>
@@ -435,101 +432,6 @@ function RefundSheet({
             className="flex-1 bg-red-600 text-white rounded-full py-3 font-semibold text-[14px]"
           >
             Refund {formatRM(Number(amount) || 0)}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const QUICK_REPLIES = [
-  "Hey, we're out of XX Hot — would Xtra Hot work as a sub?",
-  "Heads up, we're running ~5 min behind on yours.",
-  "Driver's at your door — let us know if anything changes.",
-  "Can you confirm the apartment unit number?",
-];
-
-function SendMessageSheet({
-  shortId,
-  onClose,
-  onSend,
-}: {
-  shortId: string;
-  onClose: () => void;
-  onSend: (text: string) => void;
-}) {
-  const [text, setText] = useState("");
-  const trimmed = text.trim();
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <button
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/50"
-      />
-      <div
-        className="relative bg-white rounded-t-2xl w-full sm:max-w-md shadow-2xl"
-        style={{ animation: "sheetUp 0.22s ease-out" }}
-      >
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <div className="text-[16px] font-bold text-brand-ink">
-              Message customer
-            </div>
-            <div className="text-[11.5px] text-brand-muted">
-              #{shortId} · sent over WhatsApp
-            </div>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="p-1">
-            <CloseIcon className="w-6 h-6 text-brand-ink" />
-          </button>
-        </div>
-        <div className="px-5 py-4">
-          <div className="text-[11px] font-bold text-brand-muted uppercase tracking-wide mb-2">
-            Quick replies
-          </div>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {QUICK_REPLIES.map((q, i) => (
-              <button
-                key={i}
-                onClick={() => setText(q)}
-                className="text-left bg-brand-canvas hover:bg-gray-100 transition-colors rounded-xl px-3 py-2 text-[12.5px] text-brand-ink leading-snug"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-
-          <div className="text-[11px] font-bold text-brand-muted uppercase tracking-wide mb-2">
-            Or type your own
-          </div>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Type a message..."
-            rows={3}
-            className="w-full bg-brand-canvas rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-brand-green resize-none"
-          />
-        </div>
-        <div className="px-5 pb-5 flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 bg-brand-canvas text-brand-ink rounded-full py-3 font-semibold text-[14px]"
-          >
-            Cancel
-          </button>
-          <button
-            disabled={!trimmed}
-            onClick={() => onSend(trimmed)}
-            className={
-              "flex-1 rounded-full py-3 font-semibold text-[14px] " +
-              (trimmed
-                ? "bg-brand-ink text-white"
-                : "bg-gray-200 text-gray-400 cursor-not-allowed")
-            }
-          >
-            Send
           </button>
         </div>
       </div>

@@ -13,13 +13,15 @@ import {
   FlameIcon,
   CloseIcon,
 } from "../../components/icons";
-import VendorOrderCard from "./VendorOrderCard";
+import VendorOrderCard, { type CardMenuItem } from "./VendorOrderCard";
 import PrepTimePickerSheet from "./PrepTimePickerSheet";
 import PushBackEtaSheet from "./PushBackEtaSheet";
 import RejectModal from "./RejectModal";
 import EditOrderSheet from "./EditOrderSheet";
+import VendorChatSheet from "./VendorChatSheet";
 import { UndoSnackbar, type UndoToast, newToastId } from "../../components/UndoSnackbar";
 import type { Order } from "../../lib/orders";
+import { useChatUnreadCount } from "../../lib/vendorReadState";
 import { useStock } from "../../context/StockContext";
 import { useVenue } from "../../context/VenueContext";
 
@@ -45,6 +47,7 @@ export default function VendorMainScreen() {
   const [rejectingFor, setRejectingFor] = useState<Order | null>(null);
   const [pushBackFor, setPushBackFor] = useState<Order | null>(null);
   const [editingFor, setEditingFor] = useState<Order | null>(null);
+  const [chatFor, setChatFor] = useState<Order | null>(null);
   const [toast, setToast] = useState<UndoToast | null>(null);
   const [collectedCardsHidden, setCollectedCardsHidden] = useState<Set<string>>(
     new Set(),
@@ -262,13 +265,14 @@ export default function VendorMainScreen() {
             empty="No incoming orders. Sit tight 🤝"
           >
             {incoming.map((o) => (
-              <VendorOrderCard
+              <KanbanCard
                 key={o.id}
                 order={o}
+                onOpenChat={setChatFor}
                 isFresh={freshIds.has(o.id)}
                 primaryAction={() => setAcceptingFor(o)}
                 primaryLabel={`Accept`}
-                menuItems={
+                baseMenuItems={
                   o.status === "incoming"
                     ? [
                         { label: "Edit items", onClick: () => setEditingFor(o) },
@@ -290,13 +294,14 @@ export default function VendorMainScreen() {
             empty="Nothing on the fryers."
           >
             {cooking.map((o) => (
-              <VendorOrderCard
+              <KanbanCard
                 key={o.id}
                 order={o}
+                onOpenChat={setChatFor}
                 showDriver={o.fulfillment === "delivery"}
                 primaryAction={() => onMarkReady(o)}
                 primaryLabel="Mark ready"
-                menuItems={[
+                baseMenuItems={[
                   { label: "Edit items", onClick: () => setEditingFor(o) },
                   { label: "Push back ETA", onClick: () => setPushBackFor(o) },
                 ]}
@@ -310,9 +315,10 @@ export default function VendorMainScreen() {
             empty="All caught up."
           >
             {ready.map((o) => (
-              <VendorOrderCard
+              <KanbanCard
                 key={o.id}
                 order={o}
+                onOpenChat={setChatFor}
                 showDriver={o.fulfillment === "delivery"}
                 primaryAction={
                   o.status === "ready" ? () => onCollected(o) : undefined
@@ -341,13 +347,14 @@ export default function VendorMainScreen() {
               <Empty>No incoming orders.</Empty>
             ) : (
               incoming.map((o) => (
-                <VendorOrderCard
+                <KanbanCard
                   key={o.id}
                   order={o}
+                  onOpenChat={setChatFor}
                   isFresh={freshIds.has(o.id)}
                   primaryAction={() => setAcceptingFor(o)}
                   primaryLabel="Accept"
-                  menuItems={
+                  baseMenuItems={
                     o.status === "incoming"
                       ? [
                           {
@@ -370,13 +377,14 @@ export default function VendorMainScreen() {
               <Empty>Nothing on the fryers.</Empty>
             ) : (
               cooking.map((o) => (
-                <VendorOrderCard
+                <KanbanCard
                   key={o.id}
                   order={o}
+                  onOpenChat={setChatFor}
                   showDriver={o.fulfillment === "delivery"}
                   primaryAction={() => onMarkReady(o)}
                   primaryLabel="Mark ready"
-                  menuItems={[
+                  baseMenuItems={[
                     {
                       label: "Edit items",
                       onClick: () => setEditingFor(o),
@@ -394,9 +402,10 @@ export default function VendorMainScreen() {
               <Empty>All caught up.</Empty>
             ) : (
               ready.map((o) => (
-                <VendorOrderCard
+                <KanbanCard
                   key={o.id}
                   order={o}
+                  onOpenChat={setChatFor}
                   showDriver={o.fulfillment === "delivery"}
                   primaryAction={
                     o.status === "ready" ? () => onCollected(o) : undefined
@@ -483,6 +492,13 @@ export default function VendorMainScreen() {
             orders.find((o) => o.id === editingFor.id) ?? editingFor
           }
           onClose={() => setEditingFor(null)}
+        />
+      )}
+
+      {chatFor && (
+        <VendorChatSheet
+          orderId={chatFor.id}
+          onClose={() => setChatFor(null)}
         />
       )}
 
@@ -1011,5 +1027,40 @@ function RailButton({
       {icon}
       {children}
     </button>
+  );
+}
+
+type KanbanCardProps = Omit<
+  React.ComponentProps<typeof VendorOrderCard>,
+  "menuItems" | "unreadChatCount"
+> & {
+  baseMenuItems?: CardMenuItem[];
+  onOpenChat: (o: Order) => void;
+};
+
+/**
+ * Card wrapper that injects a "Messages" kebab action with an unread-count
+ * suffix and badges the kebab with the live unread count from
+ * [src/lib/vendorReadState.ts](src/lib/vendorReadState.ts).
+ */
+function KanbanCard({ order, baseMenuItems, onOpenChat, ...rest }: KanbanCardProps) {
+  const unread = useChatUnreadCount(order);
+  const menuItems: CardMenuItem[] = [
+    {
+      label:
+        unread > 0
+          ? `Messages · ${unread > 9 ? "9+" : unread}`
+          : "Messages",
+      onClick: () => onOpenChat(order),
+    },
+    ...(baseMenuItems ?? []),
+  ];
+  return (
+    <VendorOrderCard
+      order={order}
+      menuItems={menuItems}
+      unreadChatCount={unread}
+      {...rest}
+    />
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "../context/CartContext";
 import { useNav } from "../context/NavContext";
 import { useOrders } from "../context/OrdersContext";
@@ -8,16 +8,19 @@ import { useVenueProfile } from "../context/VenueProfileContext";
 import { formatRM } from "../lib/money";
 import {
   calculateOrderCustomerEta,
+  countThreadImages,
   getChatPhase,
   lifecycleLabel,
+  MAX_IMAGES_PER_THREAD,
   type ChatPhase,
   type LifecycleLine,
   type Order,
   type OrderMessage,
 } from "../lib/orders";
+import { compressImageToDataUrl } from "../lib/imageCompress";
 import { calculateSavings } from "../lib/pricing";
 import { openPrintableReceipt } from "../lib/receipt";
-import { BackIcon, PhoneIcon, VideoIcon } from "../components/icons";
+import { BackIcon, PaperclipIcon, PhoneIcon, VideoIcon } from "../components/icons";
 
 const WA_HEADER = "#075E54";
 const WA_CHAT_BG = "#ECE5DD";
@@ -114,6 +117,68 @@ export default function WhatsAppScreen({
   const itemsToShow = timeline.slice(0, Math.max(0, bubbleCount - 1));
 
   const chatPhase: ChatPhase = getChatPhase(stable);
+  const stableId = stable.id;
+
+  // ----- Step 8: scroll tracking → preview banner for unread vendor msgs -----
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [lastSeenAt, setLastSeenAt] = useState<number>(() => Date.now());
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - (el.scrollTop + el.clientHeight);
+    setIsAtBottom(dist < 80);
+  };
+
+  // While the user's at the bottom, any new bubble is considered seen — so
+  // the banner only shows when they've scrolled away from the conversation.
+  useEffect(() => {
+    if (isAtBottom) setLastSeenAt(Date.now());
+  }, [isAtBottom, itemsToShow.length]);
+
+  const unreadVendorMessages = useMemo(() => {
+    const out: OrderMessage[] = [];
+    for (const it of itemsToShow) {
+      if (
+        it.kind === "message" &&
+        it.message.from === "vendor" &&
+        it.at > lastSeenAt
+      )
+        out.push(it.message);
+    }
+    return out;
+  }, [itemsToShow, lastSeenAt]);
+
+  const showPreviewBanner = !isAtBottom && unreadVendorMessages.length > 0;
+  const latestUnread = unreadVendorMessages[unreadVendorMessages.length - 1];
+
+  const dismissBanner = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    setLastSeenAt(Date.now());
+  };
+
+  // ----- Step 7: image attach (customer side) -----
+  const attachImage = useCallback(
+    async (file: File): Promise<string | null> => {
+      const current = stable ? countThreadImages(stable) : 0;
+      if (current >= MAX_IMAGES_PER_THREAD) {
+        return `Max ${MAX_IMAGES_PER_THREAD} images per thread. Drop a follow-up in text.`;
+      }
+      try {
+        const { dataUrl } = await compressImageToDataUrl(file);
+        sendCustomerMessage(stableId, { image: dataUrl });
+        return null;
+      } catch {
+        return "Couldn't read that image. Try another one.";
+      }
+    },
+    [stable, stableId, sendCustomerMessage],
+  );
+
+  const imageCount = countThreadImages(stable);
+  const atImageCap = imageCount >= MAX_IMAGES_PER_THREAD;
 
   return (
     <div
@@ -147,6 +212,8 @@ export default function WhatsAppScreen({
       <OrderStatusLine order={stable} venueName={venue.name} />
 
       <div
+        ref={scrollRef}
+        onScroll={onScroll}
         className="flex-1 overflow-y-auto px-3 py-4 pb-28"
         style={{
           backgroundImage:
@@ -245,6 +312,13 @@ export default function WhatsAppScreen({
                     <div className="text-[10px] font-bold uppercase tracking-wide text-brand-green mb-0.5">
                       {venue.name} kitchen
                     </div>
+                  )}
+                  {m.image && (
+                    <img
+                      src={m.image}
+                      alt=""
+                      className="rounded-lg block max-h-64 w-auto mb-1.5"
+                    />
                   )}
                   {m.text && (
                     <div className="text-[13px] whitespace-pre-line">
@@ -350,7 +424,16 @@ export default function WhatsAppScreen({
             ↻ Start over
           </button>
         </div>
+        <div ref={bottomRef} aria-hidden />
       </div>
+
+      {showPreviewBanner && (
+        <UnreadPreviewBanner
+          message={latestUnread!}
+          venueName={venue.name}
+          onClick={dismissBanner}
+        />
+      )}
 
       {confirmCancel && (
         <CancelConfirmSheet
@@ -367,6 +450,8 @@ export default function WhatsAppScreen({
       <ChatInput
         placeholder={inputPlaceholderFor(chatPhase, venue.name)}
         onSend={(text) => sendCustomerMessage(stable.id, { text })}
+        onAttachImage={attachImage}
+        atImageCap={atImageCap}
         disabled={chatPhase === "closed"}
         closedHint={
           chatPhase === "closed"
@@ -375,6 +460,35 @@ export default function WhatsAppScreen({
         }
       />
     </div>
+  );
+}
+
+function UnreadPreviewBanner({
+  message,
+  venueName,
+  onClick,
+}: {
+  message: OrderMessage;
+  venueName: string;
+  onClick: () => void;
+}) {
+  const preview = message.text?.trim() || "Sent a photo";
+  return (
+    <button
+      onClick={onClick}
+      className="absolute bottom-[60px] left-1/2 -translate-x-1/2 max-w-[88%] bg-white shadow-lg border border-gray-200 rounded-full pl-3 pr-2.5 py-2 flex items-center gap-2 z-30"
+      style={{ animation: "fadeIn 0.2s ease-out" }}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-wide text-brand-green flex-shrink-0">
+        {venueName}
+      </span>
+      <span className="text-[12px] text-brand-ink truncate max-w-[220px]">
+        {preview}
+      </span>
+      <span className="text-brand-muted text-[14px] leading-none flex-shrink-0">
+        ↓
+      </span>
+    </button>
   );
 }
 
@@ -394,26 +508,48 @@ function inputPlaceholderFor(phase: ChatPhase, venueName: string): string {
 /**
  * Bottom-pinned chat input. Sends on Enter (Shift+Enter for newline). Doesn't
  * carry framing copy itself — the caller passes `placeholder` so the input
- * can phase-shift in step 5.
+ * can phase-shift in step 5. Paperclip opens a small action picker for the
+ * camera or photo album; image attach is hard-capped via `atImageCap` so the
+ * order doesn't overflow the localStorage-backed sync channel.
  */
 function ChatInput({
   placeholder,
   onSend,
+  onAttachImage,
+  atImageCap,
   disabled,
   closedHint,
 }: {
   placeholder: string;
   onSend: (text: string) => void;
+  onAttachImage: (file: File) => Promise<string | null>;
+  atImageCap: boolean;
   disabled?: boolean;
   closedHint?: string;
 }) {
   const [draft, setDraft] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const albumRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+
   const send = () => {
     const t = draft.trim();
     if (!t || disabled) return;
     onSend(t);
     setDraft("");
   };
+
+  const handleFile = async (file: File | null | undefined) => {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    const result = await onAttachImage(file);
+    if (result) setError(result);
+    setBusy(false);
+  };
+
   return (
     <div className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-transparent">
       {closedHint && (
@@ -421,7 +557,56 @@ function ChatInput({
           {closedHint}
         </div>
       )}
-      <div className="flex items-center gap-2">
+      {error && (
+        <div className="mb-1.5 mx-auto max-w-[88%] text-center text-[11.5px] text-red-700 bg-red-50 border border-red-200 rounded-md px-2.5 py-1">
+          {error}
+        </div>
+      )}
+      <input
+        ref={albumRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          handleFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          handleFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      <div className="flex items-end gap-2 relative">
+        <button
+          onClick={() => setPickerOpen((o) => !o)}
+          aria-label="Attach image"
+          disabled={disabled || busy}
+          className="w-10 h-10 rounded-full flex items-center justify-center bg-white shadow-sm text-brand-ink disabled:opacity-50"
+        >
+          <PaperclipIcon className="w-4 h-4" />
+        </button>
+        {pickerOpen && (
+          <AttachmentPicker
+            atCap={atImageCap}
+            disabled={busy}
+            onCamera={() => {
+              setPickerOpen(false);
+              cameraRef.current?.click();
+            }}
+            onAlbum={() => {
+              setPickerOpen(false);
+              albumRef.current?.click();
+            }}
+            onClose={() => setPickerOpen(false)}
+          />
+        )}
         <input
           type="text"
           value={draft}
@@ -453,6 +638,57 @@ function ChatInput({
         </button>
       </div>
     </div>
+  );
+}
+
+function AttachmentPicker({
+  atCap,
+  disabled,
+  onCamera,
+  onAlbum,
+  onClose,
+}: {
+  atCap: boolean;
+  disabled: boolean;
+  onCamera: () => void;
+  onAlbum: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <button
+        aria-label="Close attachment picker"
+        onClick={onClose}
+        className="fixed inset-0 z-40 cursor-default"
+      />
+      <div
+        className="absolute left-0 bottom-12 z-50 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 min-w-[180px] overflow-hidden"
+        style={{ animation: "fadeIn 0.16s ease-out" }}
+      >
+        {atCap ? (
+          <div className="px-4 py-2 text-[12px] text-brand-muted leading-snug">
+            Image cap reached (max {MAX_IMAGES_PER_THREAD} per thread).
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={onCamera}
+              disabled={disabled}
+              className="block w-full text-left px-4 py-2.5 text-[13px] font-semibold text-brand-ink hover:bg-brand-canvas/60 disabled:opacity-50"
+            >
+              Take photo
+            </button>
+            <button
+              onClick={onAlbum}
+              disabled={disabled}
+              className="block w-full text-left px-4 py-2.5 text-[13px] font-semibold text-brand-ink hover:bg-brand-canvas/60 disabled:opacity-50"
+            >
+              Choose from album
+            </button>
+          </>
+        )}
+      </div>
+    </>
   );
 }
 
