@@ -25,6 +25,13 @@ export type StoreState = {
   hours: WeekHours;
   /** Minimum cart subtotal required for delivery (RM). 0 = no minimum. */
   deliveryMinSubtotal: number;
+  /**
+   * Demo-only override: when true, the clock-based off-hours check is
+   * bypassed so the customer flow runs anytime. Manual paused / closing-today
+   * still take effect — those are deliberate vendor actions worth keeping
+   * demoable. Toggled from the Demo controls drawer.
+   */
+  forceOpenForDemo: boolean;
 };
 
 const KEY = "store.v1";
@@ -38,6 +45,7 @@ function defaultsFromVenue(venue: Venue): StoreState {
     kitchenPrepMinutes: venue.kitchenPrepDefaultMinutes,
     hours: venue.hours,
     deliveryMinSubtotal: venue.deliveryMinSubtotal,
+    forceOpenForDemo: false,
   };
 }
 
@@ -50,6 +58,7 @@ type StoreContextValue = {
   setKitchenPrepMinutes: (n: number) => void;
   setDayHours: (dayIdx: number, hours: DayHours) => void;
   setDeliveryMinSubtotal: (n: number) => void;
+  setForceOpenForDemo: (v: boolean) => void;
   /** Convenience: store accepting new orders right now? */
   isAcceptingOrders: boolean;
   /** True iff outside the weekly schedule (regardless of manual status). */
@@ -197,7 +206,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [state, update],
   );
 
-  const isOutsideHours = !isWithinWeeklyHours(state.hours, now);
+  const setForceOpenForDemo = useCallback(
+    (v: boolean) => {
+      update({ ...state, forceOpenForDemo: v });
+    },
+    [state, update],
+  );
+
+  const isOutsideHours =
+    !state.forceOpenForDemo && !isWithinWeeklyHours(state.hours, now);
   const nextOpenLabel = isOutsideHours ? formatNextOpen(state.hours, now) : null;
 
   const isAcceptingOrders =
@@ -215,6 +232,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setKitchenPrepMinutes,
       setDayHours,
       setDeliveryMinSubtotal,
+      setForceOpenForDemo,
       isAcceptingOrders,
       isOutsideHours,
       nextOpenLabel,
@@ -229,6 +247,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setKitchenPrepMinutes,
       setDayHours,
       setDeliveryMinSubtotal,
+      setForceOpenForDemo,
       isAcceptingOrders,
       isOutsideHours,
       nextOpenLabel,

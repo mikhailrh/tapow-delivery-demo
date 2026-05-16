@@ -30,7 +30,12 @@ export function useSoundEnabled() {
 export default function DemoControls() {
   const { perspective, setPerspective } = usePerspective();
   const { orders, resetAll, hasOrders } = useOrders();
-  const { state: storeState, setOpen } = useStore();
+  const {
+    state: storeState,
+    setOpen,
+    setForceOpenForDemo,
+    isOutsideHours,
+  } = useStore();
   const { bringEverythingBack } = useStock();
   const [open, setOpen_] = useState(false);
   const [sound, setSound] = useSoundEnabled();
@@ -123,6 +128,32 @@ export default function DemoControls() {
                   </div>
                   <Switch on={sound} />
                 </button>
+              </Section>
+
+              <Section label="Hours override">
+                <button
+                  onClick={() =>
+                    setForceOpenForDemo(!storeState.forceOpenForDemo)
+                  }
+                  className="w-full flex items-center justify-between bg-brand-canvas rounded-xl px-3.5 py-3 text-left"
+                >
+                  <div className="min-w-0 pr-3">
+                    <div className="text-[13.5px] font-semibold text-brand-ink">
+                      Force open
+                    </div>
+                    <div className="text-[11px] text-brand-muted leading-snug">
+                      Bypass clock-based off-hours so the customer flow runs
+                      anytime. Manual paused / closing-today still apply.
+                    </div>
+                  </div>
+                  <Switch on={storeState.forceOpenForDemo} />
+                </button>
+                {!storeState.forceOpenForDemo && isOutsideHours && (
+                  <p className="text-[11.5px] text-red-700 mt-2 leading-snug">
+                    Currently outside venue hours — checkout is blocked. Flip
+                    this on to demo through it.
+                  </p>
+                )}
               </Section>
 
               <Section label="Demo data">
