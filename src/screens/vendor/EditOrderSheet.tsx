@@ -9,7 +9,7 @@ import {
 import { useOrders } from "../../context/OrdersContext";
 import { useStock } from "../../context/StockContext";
 import { useVenue } from "../../context/VenueContext";
-import { formatRM, SERVICE_CHARGE_RATE, SST_RATE } from "../../lib/money";
+import { formatRM, PLATFORM_FEE_RATE, SST_RATE } from "../../lib/money";
 import type {
   MenuCategory,
   MenuItem,
@@ -91,9 +91,9 @@ function recalc(
   discount: number,
 ): { subtotal: number; total: number } {
   const subtotal = lines.reduce((acc, l) => acc + l.unitPrice * l.quantity, 0);
-  const serviceCharge = subtotal * SERVICE_CHARGE_RATE;
+  const platformFee = subtotal * PLATFORM_FEE_RATE;
   const sst = subtotal * SST_RATE;
-  const total = Math.max(0, subtotal + serviceCharge + sst + deliveryFee - discount);
+  const total = Math.max(0, subtotal + platformFee + sst + deliveryFee - discount);
   return { subtotal, total };
 }
 

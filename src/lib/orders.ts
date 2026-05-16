@@ -119,7 +119,13 @@ export type Order = {
   lines: OrderLineSnapshot[];
   note?: string;
   subtotal: number;
-  serviceCharge: number;
+  /**
+   * Tapow's 1% customer-facing platform fee. (Field was historically named
+   * `serviceCharge` and held a 10% restaurant service charge — that conflated
+   * the 10% vendor commission with the customer fee. Renamed to make the
+   * model accurate: customer sees only this 1% platform fee.)
+   */
+  platformFee: number;
   sst: number;
   deliveryFee: number;
   /** Display label for the promo applied (code or auto-promo name). */

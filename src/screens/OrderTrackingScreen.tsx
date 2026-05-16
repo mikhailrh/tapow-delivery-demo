@@ -73,7 +73,7 @@ export default function OrderTrackingScreen({ orderId }: { orderId: string }) {
   const savings = calculateSavings(
     stable.subtotal,
     stable.deliveryFee,
-    stable.serviceCharge + stable.sst,
+    stable.platformFee + stable.sst,
   );
 
   const monogram = venue.orderIdPrefix.slice(0, 2).toUpperCase();

@@ -152,7 +152,7 @@ function buildReceiptHtml(order: Order, profile: VenueProfile): string {
 
   <div class="section totals">
     ${rowHtml("Subtotal", formatRM(order.subtotal))}
-    ${rowHtml("Service charge (10%)", formatRM(order.serviceCharge))}
+    ${rowHtml("Platform fee (1%)", formatRM(order.platformFee))}
     ${sstSection}
     ${order.deliveryFee > 0 ? rowHtml("Delivery", formatRM(order.deliveryFee)) : ""}
     ${discountRow}

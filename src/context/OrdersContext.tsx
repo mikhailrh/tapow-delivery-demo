@@ -22,16 +22,17 @@ import {
   type RefundReason,
 } from "../lib/orders";
 import {
-  SERVICE_CHARGE_RATE,
+  PLATFORM_FEE_RATE,
   SST_RATE,
 } from "../lib/money";
 import { useVenue } from "./VenueContext";
 import type { Venue } from "../data/venues";
 
 const KEY = "orders.v1";
-// Bumped to v4 with the `messages`/`review` Order fields; pre-v4 seeds
-// re-populate on next load so existing browsers don't show stale data.
-const SEED_FLAG_SUFFIX = "everSeeded.v4";
+// Bumped on any persisted-Order shape change so older browsers re-seed once
+// instead of rendering stale data. v4: messages/review fields. v5: 10%
+// serviceCharge → 1% platformFee (field rename + rate correction).
+const SEED_FLAG_SUFFIX = "everSeeded.v5";
 
 /** Demo-only id generator — fine for client-side ordering of chat messages. */
 function newMessageId(): string {
@@ -61,7 +62,7 @@ type CreateOrderInput = {
   lines: Order["lines"];
   note?: string;
   subtotal: number;
-  serviceCharge: number;
+  platformFee: number;
   sst: number;
   deliveryFee: number;
   promoCode?: string;
@@ -116,7 +117,7 @@ type OrdersContextValue = {
   ) => void;
   /**
    * Replace an order's lines (after vendor talks to the customer about a sub /
-   * qty change / removal). Recalculates subtotal / service charge / SST / total.
+   * qty change / removal). Recalculates subtotal / platform fee / SST / total.
    * Preserves deliveryFee and discount as-is. If the new total is lower than
    * the old, auto-issues a partial refund for the difference. Pushes a single
    * status update with `summary` so the customer sees one combined message
@@ -214,7 +215,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
           lines: input.lines,
           note: input.note,
           subtotal: input.subtotal,
-          serviceCharge: input.serviceCharge,
+          platformFee: input.platformFee,
           sst: input.sst,
           deliveryFee: input.deliveryFee,
           promoCode: input.promoCode,
@@ -534,12 +535,12 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             (acc, l) => acc + l.unitPrice * l.quantity,
             0,
           );
-          const serviceCharge = subtotal * SERVICE_CHARGE_RATE;
+          const platformFee = subtotal * PLATFORM_FEE_RATE;
           const sst = subtotal * SST_RATE;
           const newTotal = Math.max(
             0,
             subtotal +
-              serviceCharge +
+              platformFee +
               sst +
               o.deliveryFee -
               (o.discount ?? 0),
@@ -549,7 +550,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
             ...o,
             lines: newLines,
             subtotal,
-            serviceCharge,
+            platformFee,
             sst,
             total: newTotal,
             statusUpdates: [
@@ -711,7 +712,7 @@ type ItemDef = {
   choices?: string[];
 };
 
-const SERVICE = 0.1;
+const PLATFORM_FEE = 0.01;
 const SST = 0.06;
 
 const DELIVERY_ADDRESSES = [
@@ -748,11 +749,11 @@ function seedDriverLegs(
 
 function makeTotals(items: ItemDef[], fulfillment: "delivery" | "pickup") {
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
-  const service = subtotal * SERVICE;
+  const platformFee = subtotal * PLATFORM_FEE;
   const sst = subtotal * SST;
   const deliveryFee = fulfillment === "delivery" ? 5 : 0;
-  const total = subtotal + service + sst + deliveryFee;
-  return { subtotal, service, sst, deliveryFee, total };
+  const total = subtotal + platformFee + sst + deliveryFee;
+  return { subtotal, platformFee, sst, deliveryFee, total };
 }
 
 function buildSeedHistory(venue: Venue): OrdersState {
@@ -1087,7 +1088,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
     const readyAt = acceptedAt + 22 * 60_000;
     const collectedAt =
       readyAt + (def.fulfillment === "delivery" ? 18 : 6) * 60_000;
-    const { subtotal, service, sst, deliveryFee, total } = makeTotals(
+    const { subtotal, platformFee, sst, deliveryFee, total } = makeTotals(
       def.items,
       def.fulfillment,
     );
@@ -1109,7 +1110,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
                 : undefined,
             lines,
             subtotal,
-            serviceCharge: service,
+            platformFee,
             sst,
             deliveryFee,
             total,
@@ -1138,7 +1139,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
             def.fulfillment === "delivery" ? DELIVERY_ADDRESSES[0] : undefined,
           lines,
           subtotal,
-          serviceCharge: service,
+          platformFee,
           sst,
           deliveryFee,
           total,
@@ -1171,7 +1172,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
   // INCOMING
   for (const def of incomingDefs) {
     const placedAt = now - def.secsAgo * 1000;
-    const { subtotal, service, sst, deliveryFee, total } = makeTotals(
+    const { subtotal, platformFee, sst, deliveryFee, total } = makeTotals(
       def.items,
       def.fulfillment,
     );
@@ -1192,7 +1193,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
         lines,
         note: def.note,
         subtotal,
-        serviceCharge: service,
+        platformFee,
         sst,
         deliveryFee,
         total,
@@ -1213,7 +1214,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
   for (const def of cookingDefs) {
     const placedAt = now - def.placedSecsAgo * 1000;
     const acceptedAt = now - def.acceptedSecsAgo * 1000;
-    const { subtotal, service, sst, deliveryFee, total } = makeTotals(
+    const { subtotal, platformFee, sst, deliveryFee, total } = makeTotals(
       def.items,
       def.fulfillment,
     );
@@ -1234,7 +1235,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
         lines,
         note: def.note,
         subtotal,
-        serviceCharge: service,
+        platformFee,
         sst,
         deliveryFee,
         total,
@@ -1267,7 +1268,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
     const placedAt = now - def.placedSecsAgo * 1000;
     const acceptedAt = now - def.acceptedSecsAgo * 1000;
     const readyAt = now - def.readySecsAgo * 1000;
-    const { subtotal, service, sst, deliveryFee, total } = makeTotals(
+    const { subtotal, platformFee, sst, deliveryFee, total } = makeTotals(
       def.items,
       def.fulfillment,
     );
@@ -1287,7 +1288,7 @@ function buildFowlBoysSeed(venue: Venue): OrdersState {
             : undefined,
         lines,
         subtotal,
-        serviceCharge: service,
+        platformFee,
         sst,
         deliveryFee,
         total,
@@ -1518,7 +1519,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
     const readyAt = acceptedAt + 22 * 60_000;
     const collectedAt = readyAt + (def.fulfillment === "delivery" ? 18 : 6) * 60_000;
     const items = pickItems(def.seed, def.itemCount);
-    const { subtotal, service, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
+    const { subtotal, platformFee, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
     const lines = makeLines(items);
     const driverLegs = seedDriverLegs(def.fulfillment);
     builders.push({
@@ -1534,7 +1535,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
             address: def.fulfillment === "delivery" ? localAddresses[0] : undefined,
             lines,
             subtotal,
-            serviceCharge: service,
+            platformFee,
             sst,
             deliveryFee,
             total,
@@ -1562,7 +1563,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
           address: def.fulfillment === "delivery" ? localAddresses[0] : undefined,
           lines,
           subtotal,
-          serviceCharge: service,
+          platformFee,
           sst,
           deliveryFee,
           total,
@@ -1595,7 +1596,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
   for (const def of incomingDefs) {
     const placedAt = now - def.secsAgo * 1000;
     const items = pickItems(def.seed, def.itemCount);
-    const { subtotal, service, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
+    const { subtotal, platformFee, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
     const lines = makeLines(items);
     const driverLegs = seedDriverLegs(def.fulfillment);
     builders.push({
@@ -1610,7 +1611,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
         lines,
         note: def.note,
         subtotal,
-        serviceCharge: service,
+        platformFee,
         sst,
         deliveryFee,
         total,
@@ -1631,7 +1632,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
     const placedAt = now - def.placedSecsAgo * 1000;
     const acceptedAt = now - def.acceptedSecsAgo * 1000;
     const items = pickItems(def.seed, def.itemCount);
-    const { subtotal, service, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
+    const { subtotal, platformFee, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
     const lines = makeLines(items);
     const driverLegs = seedDriverLegs(def.fulfillment);
     builders.push({
@@ -1646,7 +1647,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
         lines,
         note: def.note,
         subtotal,
-        serviceCharge: service,
+        platformFee,
         sst,
         deliveryFee,
         total,
@@ -1676,7 +1677,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
     const acceptedAt = now - def.acceptedSecsAgo * 1000;
     const readyAt = now - def.readySecsAgo * 1000;
     const items = pickItems(def.seed, def.itemCount);
-    const { subtotal, service, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
+    const { subtotal, platformFee, sst, deliveryFee, total } = makeTotals(items, def.fulfillment);
     const lines = makeLines(items);
     const driverLegs = seedDriverLegs(def.fulfillment);
     builders.push({
@@ -1690,7 +1691,7 @@ function buildGenericSeed(venue: Venue): OrdersState {
         address: def.fulfillment === "delivery" ? localAddresses[0] : undefined,
         lines,
         subtotal,
-        serviceCharge: service,
+        platformFee,
         sst,
         deliveryFee,
         total,

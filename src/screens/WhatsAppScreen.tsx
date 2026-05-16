@@ -88,7 +88,7 @@ export default function WhatsAppScreen({
     return calculateSavings(
       stable.subtotal,
       stable.deliveryFee,
-      stable.serviceCharge + stable.sst,
+      stable.platformFee + stable.sst,
     );
   }, [stable]);
 

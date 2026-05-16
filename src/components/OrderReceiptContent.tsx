@@ -32,8 +32,8 @@ export default function OrderReceiptContent({ order }: { order: Order }) {
       <div className="border-t border-gray-200 mt-1.5 pt-1.5">
         <Row label="Subtotal" value={formatRM(order.subtotal)} />
         <Row
-          label="Service charge (10%)"
-          value={formatRM(order.serviceCharge)}
+          label="Platform fee (1%)"
+          value={formatRM(order.platformFee)}
         />
         <Row label="SST (6%)" value={formatRM(order.sst)} />
         {order.deliveryFee > 0 && (

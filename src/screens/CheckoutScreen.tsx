@@ -12,7 +12,7 @@ import {
 import { calculateCustomerEta, snapshotLines } from "../lib/orders";
 import {
   DELIVERY_FEE,
-  SERVICE_CHARGE_RATE,
+  PLATFORM_FEE_RATE,
   SST_RATE,
   formatRM,
 } from "../lib/money";
@@ -60,12 +60,12 @@ export default function CheckoutScreen() {
   const activePromo = codeMatch ?? autoPromo;
   const discount = activePromo ? computeDiscount(activePromo, subtotal) : 0;
 
-  const serviceCharge = subtotal * SERVICE_CHARGE_RATE;
+  const platformFee = subtotal * PLATFORM_FEE_RATE;
   const sst = subtotal * SST_RATE;
   const deliveryFee = mode === "pickup" ? 0 : DELIVERY_FEE;
   const total = Math.max(
     0,
-    subtotal + serviceCharge + sst + deliveryFee - discount,
+    subtotal + platformFee + sst + deliveryFee - discount,
   );
 
   const eta = calculateCustomerEta({
@@ -91,7 +91,7 @@ export default function CheckoutScreen() {
       lines: snapshotLines(lines),
       note: note || undefined,
       subtotal,
-      serviceCharge,
+      platformFee,
       sst,
       deliveryFee,
       promoCode: activePromo?.label,
@@ -216,8 +216,8 @@ export default function CheckoutScreen() {
           </h2>
           <Row label="Subtotal" value={formatRM(subtotal)} />
           <Row
-            label={`Service charge (${Math.round(SERVICE_CHARGE_RATE * 100)}%)`}
-            value={formatRM(serviceCharge)}
+            label={`Platform fee (${Math.round(PLATFORM_FEE_RATE * 100)}%)`}
+            value={formatRM(platformFee)}
           />
           <Row
             label={`SST (${Math.round(SST_RATE * 100)}%)`}

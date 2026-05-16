@@ -114,7 +114,7 @@ export default function VendorOrderDetailScreen({
             Totals
           </div>
           <Row label="Subtotal" value={formatRM(order.subtotal)} />
-          <Row label="Service charge" value={formatRM(order.serviceCharge)} />
+          <Row label="Platform fee" value={formatRM(order.platformFee)} />
           <Row label="SST" value={formatRM(order.sst)} />
           {order.deliveryFee > 0 && (
             <Row label="Delivery" value={formatRM(order.deliveryFee)} />

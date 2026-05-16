@@ -229,7 +229,7 @@ type Promo = {
 };
 ```
 
-Default seed: Lunch deal (12–2 PM, 10% off), Happy hour (5 PM–close, RM5 off, min RM30), `SHAQ20` (20% off code), `FOWL10` (RM10 off, min RM40, 14-day expiry). Manager Promos tab toggles + adds + removes via "Add code" sheet. The cart input takes precedence over auto-promos; otherwise the highest-discounting active auto-promo applies. Discount subtracts from total **after** service charge / SST / delivery — keeps the SST math stable and the receipt rows easy to read.
+Default seed: Lunch deal (12–2 PM, 10% off), Happy hour (5 PM–close, RM5 off, min RM30), `SHAQ20` (20% off code), `FOWL10` (RM10 off, min RM40, 14-day expiry). Manager Promos tab toggles + adds + removes via "Add code" sheet. The cart input takes precedence over auto-promos; otherwise the highest-discounting active auto-promo applies. Discount subtracts from total **after** platform fee / SST / delivery — keeps the SST math stable and the receipt rows easy to read.
 
 ### Venue profile ([src/context/VenueProfileContext.tsx](src/context/VenueProfileContext.tsx))
 
@@ -287,13 +287,15 @@ Currently only one item has imagery: `Bone In` uses `/images/off-the-hook.jpeg` 
 Single source of truth in [src/lib/money.ts](src/lib/money.ts):
 
 ```
-Service charge   10%   (Malaysian F&B, restaurant-set, not a tax)
-SST               6%   (Sales & Service Tax — note: 6%, not 8%
+Platform fee     1%    (Tapow, customer-facing)
+SST              6%    (Sales & Service Tax — note: 6%, not 8%
                         as in the multi-venue tapow-demo)
 Delivery fee   RM5     (waived on pickup)
 ```
 
-**No customer-facing platform fee** — pilot decision. Tapow's revenue lives outside what FowlBoys collects from the customer, and surfacing a platform fee in the demo would have made the savings line awkward.
+**Two fees, two surfaces:** the customer sees only the 1% **platform fee**. The 10% you'll see in pitch decks is Tapow's **commission on the vendor** — vendor-side accounting only, deducted from the vendor's payout, **never surfaced on the customer's summary or receipt**. The demo currently does not model the vendor commission anywhere on screen; if a "your payout = order total − Tapow commission" view is needed on the vendor surface, that's a separate build.
+
+The persisted Order field is `platformFee` (renamed from `serviceCharge` when the model was clarified — see `SEED_FLAG_SUFFIX = "everSeeded.v5"` in [src/context/OrdersContext.tsx](src/context/OrdersContext.tsx), which forces a one-time re-seed on existing browsers so old 10% values get replaced).
 
 `formatRM(n)` → `"RM39.00"` (always 2dp, no thousand separators).
 
@@ -354,7 +356,7 @@ A live `m:ss` prep countdown sits next to the WhatsApp icon in the footer; turns
 - **COOKING**: `[{ label: "Edit items" }, { label: "Push back ETA" }]`. Push back → [PushBackEtaSheet.tsx](src/screens/vendor/PushBackEtaSheet.tsx) (+5/+10/+15/Custom). Updates per-order `prepMinutes`, customer gets a "running X late" WhatsApp.
 - **READY**: no kebab. Primary action is "Customer arrived" / "Driver collected".
 
-**Edit items flow** — covers the "kitchen called the customer about a sub" case. [EditOrderSheet.tsx](src/screens/vendor/EditOrderSheet.tsx) lists every line with an inline qty stepper, a **Substitute** button, and an **Out of stock** pill (trash icon + label). Edits are staged locally; "Apply changes & notify customer" commits them in one batch. Substitute opens a full-screen menu picker (search + grouped by category) — picking an item swaps the line, preserving qty. The substitution uses `defaultSelections` (first required option per modifier group); the vendor's already negotiated specifics on the phone, so the modifier picker's been deliberately skipped. Last-line removal is blocked — the Out-of-stock pill disables when only one line remains; vendor should reject the order instead. Tapping Out of stock both removes the line *and* 86s the item via `StockContext.toggleItem` so the next customer doesn't immediately re-order it (mirrors the auto-86 behavior already in the Reject modal). `OrdersContext.applyOrderEdits(id, newLines, summary)` recalculates subtotal / service charge / SST from the new lines, preserves deliveryFee and discount, pushes one combined kitchen-bubble status update, and if the new total drops below the original, auto-issues a partial refund (pending → processed via the same 2s mock cycle as `issueRefund`). If the new total is *higher* than the original, the sheet flags it but doesn't auto-charge — see the Stripe upcharge flag at the top of "Known gaps" for the production plan.
+**Edit items flow** — covers the "kitchen called the customer about a sub" case. [EditOrderSheet.tsx](src/screens/vendor/EditOrderSheet.tsx) lists every line with an inline qty stepper, a **Substitute** button, and an **Out of stock** pill (trash icon + label). Edits are staged locally; "Apply changes & notify customer" commits them in one batch. Substitute opens a full-screen menu picker (search + grouped by category) — picking an item swaps the line, preserving qty. The substitution uses `defaultSelections` (first required option per modifier group); the vendor's already negotiated specifics on the phone, so the modifier picker's been deliberately skipped. Last-line removal is blocked — the Out-of-stock pill disables when only one line remains; vendor should reject the order instead. Tapping Out of stock both removes the line *and* 86s the item via `StockContext.toggleItem` so the next customer doesn't immediately re-order it (mirrors the auto-86 behavior already in the Reject modal). `OrdersContext.applyOrderEdits(id, newLines, summary)` recalculates subtotal / platform fee / SST from the new lines, preserves deliveryFee and discount, pushes one combined kitchen-bubble status update, and if the new total drops below the original, auto-issues a partial refund (pending → processed via the same 2s mock cycle as `issueRefund`). If the new total is *higher* than the original, the sheet flags it but doesn't auto-charge — see the Stripe upcharge flag at the top of "Known gaps" for the production plan.
 
 **5-second undo** ([src/components/UndoSnackbar.tsx](src/components/UndoSnackbar.tsx)) on Accept / Mark Ready / Mark Collected / Reject / Push-back. Captures a snapshot of the order before mutation, restores via `OrdersContext.restoreOrder(snapshot)` if Undo is tapped before the timer expires.
 
@@ -648,7 +650,7 @@ Earlier passes had a one-way kitchen-message sheet (write-only, vendor → custo
 
 ### Shared receipt content
 
-[src/components/OrderReceiptContent.tsx](src/components/OrderReceiptContent.tsx) is the canonical "what was ordered" block — line items with modifier labels + Subtotal / Service charge / SST / Delivery / Discount / Total rows. Used both inside WhatsAppScreen's receipt bubble (wrapped in greeting + Bubble chrome) and inside OrderTrackingScreen's *"View order summary"* expandable (wrapped with the delivery address and order ref). Both surfaces share identical totals math and identical line rendering through this one component.
+[src/components/OrderReceiptContent.tsx](src/components/OrderReceiptContent.tsx) is the canonical "what was ordered" block — line items with modifier labels + Subtotal / Platform fee (1%) / SST / Delivery / Discount / Total rows. Used both inside WhatsAppScreen's receipt bubble (wrapped in greeting + Bubble chrome) and inside OrderTrackingScreen's *"View order summary"* expandable (wrapped with the delivery address and order ref). Both surfaces share identical totals math and identical line rendering through this one component.
 
 ### What changed (data model + plumbing)
 
