@@ -31,6 +31,7 @@ export const BAR_ABONG_MENU: MenuCategory[] = [
         description: "Japanese spicy citrus aioli / togarashi pepper",
         price: 16,
         containsAlcohol: true,
+        image: "/images/bar-abong/jicama-squid-ball.jpg",
       },
       {
         id: "ba-cheese-puff",
