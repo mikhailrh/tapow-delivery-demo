@@ -139,6 +139,7 @@ export const BAR_ABONG_MENU: MenuCategory[] = [
         name: "Local Sole",
         description: "whole fish / buttery caper sauce / dill",
         price: 72,
+        image: "/images/bar-abong/local-sole.jpg",
       },
       {
         id: "ba-fish-sandwich",
@@ -146,6 +147,7 @@ export const BAR_ABONG_MENU: MenuCategory[] = [
         description:
           "local catch tengiri / house baked sourdough / abong coleslaw / tartar",
         price: 36,
+        image: "/images/bar-abong/fish-sandwich.jpg",
       },
       {
         id: "ba-grilled-uji-rashid",
@@ -158,6 +160,7 @@ export const BAR_ABONG_MENU: MenuCategory[] = [
         name: "Stingray Sambal",
         description: "sambal belacan / baby gem bulb",
         price: 33,
+        image: "/images/bar-abong/stingray-sambal.jpg",
       },
       {
         id: "ba-lobster-quiche",

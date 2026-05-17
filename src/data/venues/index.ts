@@ -131,9 +131,8 @@ const IMG = {
     "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1000&q=80&auto=format&fit=crop",
   smashburger:
     "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1000&q=80&auto=format&fit=crop",
-  /* Bar Abong placeholder. Swap to `/images/bar-abong.webp` when the real shot lands. */
-  barAbong:
-    "https://images.unsplash.com/photo-1551782450-a2132b4ba21d?w=1000&q=80&auto=format&fit=crop",
+  /* Bar Abong hero — reusing the Local Sole shot (also wired on the menu item). */
+  barAbong: "/images/bar-abong/local-sole.jpg",
 };
 
 /* Bar Abong: Wed–Sun, 6pm–12am, kitchen last order 10:45pm; Mon/Tue closed. */
