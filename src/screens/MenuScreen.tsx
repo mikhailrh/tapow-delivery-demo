@@ -384,7 +384,7 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
                 className="scrollbar-none overflow-x-auto"
               >
                 <div className="flex gap-5 px-4 whitespace-nowrap">
-                  {MENU.map((cat) => {
+                  {MENU.filter((cat) => cat.name).map((cat) => {
                     const isActive = cat.id === activeCat;
                     return (
                       <button
@@ -421,9 +421,11 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
                 >
                   {i > 0 && <div className="h-2 bg-brand-canvas" />}
                   <div className="px-4 pt-4">
-                    <h3 className="text-[20px] font-bold text-brand-ink mb-1">
-                      {cat.name}
-                    </h3>
+                    {cat.name && (
+                      <h3 className="text-[20px] font-bold text-brand-ink mb-1">
+                        {cat.name}
+                      </h3>
+                    )}
                     {cat.items.map((item) => (
                       <ItemRow
                         key={item.id}
@@ -436,6 +438,11 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
                         }
                       />
                     ))}
+                    {cat.note && (
+                      <p className="text-[12px] text-brand-muted italic pt-2 pb-1">
+                        {cat.note}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -811,10 +818,12 @@ function SearchBody({
         </div>
       )}
       {Array.from(grouped.entries()).map(([categoryName, items]) => (
-        <div key={categoryName} className="mb-2">
-          <h3 className="text-[13px] font-semibold text-brand-muted uppercase tracking-wide pt-3 pb-1">
-            {categoryName}
-          </h3>
+        <div key={categoryName || "_ungrouped"} className="mb-2">
+          {categoryName && (
+            <h3 className="text-[13px] font-semibold text-brand-muted uppercase tracking-wide pt-3 pb-1">
+              {categoryName}
+            </h3>
+          )}
           {items.map((item) => (
             <ItemRow
               key={item.id}
@@ -867,23 +876,25 @@ function CategoryDrawer({
           </div>
         </div>
         <div className="border-t border-gray-100 max-h-[60vh] overflow-y-auto">
-          {menu.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => onPick(cat.id)}
-              className={
-                "w-full text-left px-5 py-4 border-b border-gray-50 " +
-                (cat.id === activeCat
-                  ? "text-brand-ink font-bold"
-                  : "text-brand-ink/80 font-medium")
-              }
-            >
-              {cat.name}
-              <span className="text-brand-muted font-normal ml-2 text-[13px]">
-                ({cat.items.length})
-              </span>
-            </button>
-          ))}
+          {menu
+            .filter((cat) => cat.name)
+            .map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => onPick(cat.id)}
+                className={
+                  "w-full text-left px-5 py-4 border-b border-gray-50 " +
+                  (cat.id === activeCat
+                    ? "text-brand-ink font-bold"
+                    : "text-brand-ink/80 font-medium")
+                }
+              >
+                {cat.name}
+                <span className="text-brand-muted font-normal ml-2 text-[13px]">
+                  ({cat.items.length})
+                </span>
+              </button>
+            ))}
         </div>
         <div className="p-3 pb-5 safe-area-bottom">
           <button

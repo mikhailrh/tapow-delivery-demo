@@ -58,10 +58,14 @@ export type MenuItem = {
   image?: string;
   /** Optional modifier groups. Each group is required-or-not, single-or-multi. */
   modifierGroups?: ModifierGroup[];
+  /** Item contains alcohol — surfaced on menus that mark it (e.g. Bar Abong's ▲). */
+  containsAlcohol?: boolean;
 };
 
 export type MenuCategory = {
   id: string;
   name: string;
   items: MenuItem[];
+  /** Optional category-wide footer note (e.g. drinks-list housekeeping). */
+  note?: string;
 };

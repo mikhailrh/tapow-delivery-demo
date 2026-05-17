@@ -326,7 +326,7 @@ function DishRow({
           {hit.itemName}
         </div>
         <div className="text-[12px] text-brand-muted truncate">
-          {hit.category} · {hit.venue.name}
+          {hit.category ? `${hit.category} · ${hit.venue.name}` : hit.venue.name}
         </div>
       </div>
     </button>

@@ -3,11 +3,14 @@ import { FOWLBOYS_MENU } from "../menus/fowlboys";
 import { KOHINOOR_MENU } from "../menus/kohinoor";
 import { GOOJIBURG_MENU } from "../menus/goojiburg";
 import { ALU_ALU_KITCHEN_MENU } from "../menus/alu-alu-kitchen";
+import { BAR_ABONG_MENU } from "../menus/bar-abong";
 
 export type DayHours = {
   closed: boolean;
   openMinutes: number;
   closeMinutes: number;
+  /** Optional kitchen cut-off (minutes since midnight) — bar may stay open past this. */
+  kitchenLastOrderMinutes?: number;
 };
 
 export type WeekHours = DayHours[];
@@ -61,6 +64,13 @@ export type Venue = {
   heroImage: string;
   isOpen: boolean;
   hasOffer?: VenueOffer;
+  /** Geo coords for map / distance work — populated per venue as we backfill. */
+  lat?: number;
+  lng?: number;
+  /** Cash-on-delivery acceptance; undefined ≡ accepts cash. */
+  cashAccepted?: boolean;
+  /** Display strings of accepted non-cash methods (e.g. "Visa", "DuitNow"). */
+  acceptedPaymentMethods?: string[];
 };
 
 const standardHours = (): WeekHours => [
@@ -121,6 +131,66 @@ const IMG = {
     "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=1000&q=80&auto=format&fit=crop",
   smashburger:
     "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1000&q=80&auto=format&fit=crop",
+  /* Bar Abong placeholder. Swap to `/images/bar-abong.webp` when the real shot lands. */
+  barAbong:
+    "https://images.unsplash.com/photo-1551782450-a2132b4ba21d?w=1000&q=80&auto=format&fit=crop",
+};
+
+/* Bar Abong: Wed–Sun, 6pm–12am, kitchen last order 10:45pm; Mon/Tue closed. */
+const barAbongHours = (): WeekHours => {
+  const open = 18 * 60;
+  const close = 24 * 60;
+  const lastOrder = 22 * 60 + 45;
+  const dayOpen = (): DayHours => ({
+    closed: false,
+    openMinutes: open,
+    closeMinutes: close,
+    kitchenLastOrderMinutes: lastOrder,
+  });
+  const dayClosed = (): DayHours => ({
+    closed: true,
+    openMinutes: 0,
+    closeMinutes: 0,
+  });
+  return [
+    dayOpen(),    // Sun
+    dayClosed(),  // Mon
+    dayClosed(),  // Tue
+    dayOpen(),    // Wed
+    dayOpen(),    // Thu
+    dayOpen(),    // Fri
+    dayOpen(),    // Sat
+  ];
+};
+
+export const BAR_ABONG_VENUE: Venue = {
+  slug: "bar-abong",
+  name: "Bar Abong",
+  address: "Kota Kinabalu Waterfront, Sabah",
+  ssm: "BAR-014",
+  brandTokens: {
+    green: "#06C167",
+    ink: "#0A0A0A",
+    muted: "#6B6B6B",
+    canvas: "#F6F6F6",
+  },
+  orderIdPrefix: "BAR",
+  kitchenPrepDefaultMinutes: 30,
+  deliveryMinSubtotal: 30,
+  hours: barAbongHours(),
+  menu: BAR_ABONG_MENU,
+  cuisine: "Malaysian",
+  priceTier: 3,
+  rating: 5.0,
+  ratingCount: 48,
+  estimatedDeliveryMinutes: [30, 45],
+  deliveryFee: 7,
+  heroImage: IMG.barAbong,
+  isOpen: true,
+  lat: 5.9804,
+  lng: 116.0735,
+  cashAccepted: false,
+  acceptedPaymentMethods: ["Visa", "Mastercard", "Duit now", "QR Pay"],
 };
 
 export const FOWLBOYS_VENUE: Venue = {
@@ -478,6 +548,7 @@ const KK_VENUES: Venue[] = [
 ];
 
 export const VENUES: Record<string, Venue> = {
+  [BAR_ABONG_VENUE.slug]: BAR_ABONG_VENUE,
   [GOOJIBURG_VENUE.slug]: GOOJIBURG_VENUE,
   [FOWLBOYS_VENUE.slug]: FOWLBOYS_VENUE,
   [NOKO_NOKO_VENUE.slug]: NOKO_NOKO_VENUE,
