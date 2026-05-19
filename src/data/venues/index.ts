@@ -178,7 +178,7 @@ export const BAR_ABONG_VENUE: Venue = {
   deliveryMinSubtotal: 30,
   hours: barAbongHours(),
   menu: BAR_ABONG_MENU,
-  cuisine: "Malaysian",
+  cuisine: "Seafood",
   priceTier: 3,
   rating: 5.0,
   ratingCount: 48,
