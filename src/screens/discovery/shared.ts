@@ -112,3 +112,57 @@ export function buildNotifications(): NotificationEntry[] {
   entries.sort((a, b) => b.at - a.at);
   return entries.slice(0, NOTIF_LIMIT);
 }
+
+/* ------------------------------------------------------------------ */
+/*                Discovery prefs — favourites + hidden               */
+/* ------------------------------------------------------------------ */
+/* Per-customer preference state stored in localStorage. Cross-venue;
+   the user's heart on a venue / hiding a venue is a global act, not
+   tied to any single venue's order history. */
+
+const FAV_KEY = "tapow.discovery.favourites.v1";
+const HIDE_KEY = "tapow.discovery.hidden.v1";
+const HIDE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export function readFavourites(): Set<string> {
+  if (typeof localStorage === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(FAV_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set(arr) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+export function writeFavourites(favs: Set<string>): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(FAV_KEY, JSON.stringify([...favs]));
+}
+
+/** Map of slug → timestamp when hidden. Expired entries auto-pruned on read. */
+export function readHidden(): Record<string, number> {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(HIDE_KEY);
+    const obj = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    const now = Date.now();
+    let changed = false;
+    for (const slug of Object.keys(obj)) {
+      if (now - obj[slug] > HIDE_DURATION_MS) {
+        delete obj[slug];
+        changed = true;
+      }
+    }
+    if (changed) localStorage.setItem(HIDE_KEY, JSON.stringify(obj));
+    return obj;
+  } catch {
+    return {};
+  }
+}
+
+export function writeHidden(hidden: Record<string, number>): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(HIDE_KEY, JSON.stringify(hidden));
+}

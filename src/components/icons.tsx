@@ -287,3 +287,22 @@ export const TagIcon = (p: SVGProps<SVGSVGElement>) => (
     <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
   </svg>
 );
+
+/* Pass `filled` to render solid (favourited); omit for outline. */
+export const HeartIcon = ({
+  filled,
+  ...p
+}: SVGProps<SVGSVGElement> & { filled?: boolean }) => (
+  <svg {...base} {...p} fill={filled ? "currentColor" : "none"}>
+    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+  </svg>
+);
+
+export const EyeSlashIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <path d="M9.88 9.88a3 3 0 0 0 4.24 4.24" />
+    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 11 7 11 7a13.16 13.16 0 0 1-1.67 2.68" />
+    <path d="M6.61 6.61A13.526 13.526 0 0 0 1 12s4 7 11 7a9.74 9.74 0 0 0 5.39-1.61" />
+    <line x1="2" y1="2" x2="22" y2="22" />
+  </svg>
+);

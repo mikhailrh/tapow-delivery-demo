@@ -34,12 +34,20 @@ type Hit = VenueHit | DishHit;
 export default function SearchOverlay({
   onClose,
   onSelectCuisine,
+  scopedSlugs,
+  scopeLabel,
 }: {
   onClose: () => void;
   onSelectCuisine: (c: Cuisine) => void;
+  /** If non-null, restrict search to venues whose slug is in this set. */
+  scopedSlugs?: Set<string> | null;
+  /** Human label for the scope, used in placeholder + empty state. */
+  scopeLabel?: string | null;
 }) {
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const scope = scopedSlugs ?? null;
+  const scopeName = scopeLabel ?? null;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -55,11 +63,16 @@ export default function SearchOverlay({
 
   const orderAgain = useMemo(() => buildOrderAgainList(), []);
 
+  const searchPool = useMemo(
+    () => (scope ? VENUE_LIST.filter((v) => scope.has(v.slug)) : VENUE_LIST),
+    [scope],
+  );
+
   const hits = useMemo<Hit[]>(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return [];
     const out: Hit[] = [];
-    for (const v of VENUE_LIST) {
+    for (const v of searchPool) {
       if (
         v.name.toLowerCase().includes(needle) ||
         v.cuisine.toLowerCase().includes(needle) ||
@@ -82,7 +95,7 @@ export default function SearchOverlay({
       }
     }
     return out.slice(0, 30);
-  }, [q]);
+  }, [q, searchPool]);
 
   const venueHits = hits.filter((h): h is VenueHit => h.kind === "venue");
   const dishHits = hits.filter((h): h is DishHit => h.kind === "dish");
@@ -108,7 +121,7 @@ export default function SearchOverlay({
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search Tapow"
+            placeholder={scopeName ? `Search your ${scopeName}` : "Search Tapow"}
             className="flex-1 bg-transparent outline-none text-[14px] text-brand-ink placeholder:text-brand-muted"
           />
           {q && (
@@ -131,7 +144,7 @@ export default function SearchOverlay({
             onPickCuisine={onSelectCuisine}
           />
         ) : hits.length === 0 ? (
-          <NoResults q={q} />
+          <NoResults q={q} scopeName={scopeName} />
         ) : (
           <div className="pb-6">
             {venueHits.length > 0 && (
@@ -239,14 +252,22 @@ function BrowseLanding({
   );
 }
 
-function NoResults({ q }: { q: string }) {
+function NoResults({
+  q,
+  scopeName,
+}: {
+  q: string;
+  scopeName: string | null;
+}) {
   return (
     <div className="px-4 pt-12 text-center">
       <div className="text-[14px] text-brand-ink font-semibold">
         No matches for &quot;{q}&quot;
       </div>
       <div className="text-[12.5px] text-brand-muted mt-1">
-        Try a different keyword, or browse cuisines on the homepage.
+        {scopeName
+          ? `Nothing in your ${scopeName} matches. Close the favourites filter to search everywhere.`
+          : "Try a different keyword, or browse cuisines on the homepage."}
       </div>
     </div>
   );

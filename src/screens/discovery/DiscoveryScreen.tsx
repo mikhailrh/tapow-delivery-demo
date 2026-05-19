@@ -11,8 +11,10 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CloseIcon,
-  FilterIcon,
+  EyeSlashIcon,
+  HeartIcon,
   HomeIcon,
+  KebabIcon,
   PinIcon,
   SearchIcon,
   ShoppingBagIcon,
@@ -26,56 +28,14 @@ import {
   CUISINE_TILES,
   buildNotifications,
   buildOrderAgainList,
+  readFavourites,
+  readHidden,
   relativeTimeFrom,
+  writeFavourites,
+  writeHidden,
   type NotificationEntry,
   type OrderAgainEntry,
 } from "./shared";
-
-type HeroFilterId = "near-me" | "top-rated" | "free-delivery" | "new-arrivals";
-
-type HeroCategory = {
-  id: HeroFilterId;
-  title: string;
-  subtitle: string;
-  emoji: string;
-  bg: string;
-  activeBg: string;
-};
-
-const HERO_CATEGORIES: HeroCategory[] = [
-  {
-    id: "near-me",
-    title: "Near Me",
-    subtitle: "Get it quick",
-    emoji: "📍",
-    bg: "bg-emerald-50",
-    activeBg: "bg-emerald-100 ring-2 ring-emerald-500",
-  },
-  {
-    id: "top-rated",
-    title: "Top Rated",
-    subtitle: "Best of Tapow",
-    emoji: "⭐",
-    bg: "bg-amber-50",
-    activeBg: "bg-amber-100 ring-2 ring-amber-500",
-  },
-  {
-    id: "free-delivery",
-    title: "Free Delivery",
-    subtitle: "Today only",
-    emoji: "🛵",
-    bg: "bg-rose-50",
-    activeBg: "bg-rose-100 ring-2 ring-rose-500",
-  },
-  {
-    id: "new-arrivals",
-    title: "New on Tapow",
-    subtitle: "Try something new",
-    emoji: "✨",
-    bg: "bg-violet-50",
-    activeBg: "bg-violet-100 ring-2 ring-violet-500",
-  },
-];
 
 type SortKey =
   | "recommended"
@@ -114,26 +74,17 @@ function navigateToVenue(slug: string, scrollTop: number) {
   window.location.assign(`/v/${slug}`);
 }
 
-function applyHeroFilter(list: Venue[], hero: HeroFilterId | null): Venue[] {
-  if (!hero) return list;
-  if (hero === "top-rated") return list.filter((v) => v.rating >= 4.7);
-  if (hero === "free-delivery") {
-    return list.filter(
-      (v) =>
-        v.deliveryFee === 0 ||
-        (v.hasOffer?.label.toLowerCase().includes("free delivery") ?? false),
-    );
-  }
-  if (hero === "new-arrivals") return list.filter((v) => v.ratingCount < 250);
-  // "near-me" doesn't filter — it just biases sort toward speed.
-  return list;
+function isFreeDelivery(v: Venue): boolean {
+  return (
+    v.deliveryFee === 0 ||
+    (v.hasOffer?.label.toLowerCase().includes("free delivery") ?? false)
+  );
 }
 
 function sortVenues(
   list: Venue[],
   sortBy: SortKey,
   pickupMode: boolean,
-  hero: HeroFilterId | null,
 ): Venue[] {
   const sorted = list.slice();
   const speedKey = (v: Venue) =>
@@ -141,7 +92,6 @@ function sortVenues(
   // Always anchor closed venues to the bottom regardless of sort key.
   sorted.sort((a, b) => {
     if (a.isOpen !== b.isOpen) return a.isOpen ? -1 : 1;
-    if (hero === "near-me") return speedKey(a) - speedKey(b);
     switch (sortBy) {
       case "rating":
         return b.rating - a.rating;
@@ -162,12 +112,56 @@ export default function DiscoveryScreen() {
   const [under30, setUnder30] = useState(false);
   const [offersOnly, setOffersOnly] = useState(false);
   const [pickupMode, setPickupMode] = useState(false);
-  const [heroFilter, setHeroFilter] = useState<HeroFilterId | null>(null);
+  const [topRatedOnly, setTopRatedOnly] = useState(false);
+  const [freeDeliveryOnly, setFreeDeliveryOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("recommended");
   const [sortSheetOpen, setSortSheetOpen] = useState(false);
   const [notifSheetOpen, setNotifSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [modeSheetOpen, setModeSheetOpen] = useState(false);
+  const [favourites, setFavourites] = useState<Set<string>>(() =>
+    readFavourites(),
+  );
+  const [hidden, setHidden] = useState<Record<string, number>>(() =>
+    readHidden(),
+  );
+  const [actionVenue, setActionVenue] = useState<Venue | null>(null);
+  const [favouritesOnly, setFavouritesOnly] = useState(false);
+  const [inlineSearch, setInlineSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  /* Mode (delivery/pickup) is a state, not a filter — Order Again and the
+     inline search both stay irrelevant to it. */
+  const anyFilterActive =
+    favouritesOnly ||
+    cuisineFilter !== null ||
+    topRatedOnly ||
+    freeDeliveryOnly ||
+    under30 ||
+    offersOnly;
+
+  /* Reset the inline query whenever filters clear so it doesn't persist as a
+     hidden constraint the user has no UI to see. */
+  useEffect(() => {
+    if (!anyFilterActive && inlineSearch) setInlineSearch("");
+  }, [anyFilterActive, inlineSearch]);
+
+  const toggleFavourite = (slug: string) => {
+    setFavourites((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      writeFavourites(next);
+      return next;
+    });
+  };
+  const hideVenue = (slug: string) => {
+    setHidden((prev) => {
+      const next = { ...prev, [slug]: Date.now() };
+      writeHidden(next);
+      return next;
+    });
+  };
 
   const orderAgain = useMemo(() => buildOrderAgainList(), []);
   // Re-read whenever the bell is opened so a freshly-placed order shows up.
@@ -213,7 +207,8 @@ export default function DiscoveryScreen() {
   };
 
   const filteredVenues = useMemo(() => {
-    let list = VENUE_LIST.slice();
+    let list = VENUE_LIST.slice().filter((v) => !(v.slug in hidden));
+    if (favouritesOnly) list = list.filter((v) => favourites.has(v.slug));
     if (cuisineFilter) list = list.filter((v) => v.cuisine === cuisineFilter);
     if (under30) {
       list = list.filter((v) =>
@@ -223,9 +218,35 @@ export default function DiscoveryScreen() {
       );
     }
     if (offersOnly) list = list.filter((v) => v.hasOffer);
-    list = applyHeroFilter(list, heroFilter);
-    return sortVenues(list, sortBy, pickupMode, heroFilter);
-  }, [cuisineFilter, under30, offersOnly, pickupMode, heroFilter, sortBy]);
+    if (topRatedOnly) list = list.filter((v) => v.rating >= 4.7);
+    if (freeDeliveryOnly) list = list.filter(isFreeDelivery);
+    /* Inline narrow-search runs last so it works on the already-filtered set.
+       Only applies when at least one other filter is active — otherwise we
+       wouldn't have shown the input at all. */
+    const q = inlineSearch.trim().toLowerCase();
+    if (anyFilterActive && q) {
+      list = list.filter(
+        (v) =>
+          v.name.toLowerCase().includes(q) ||
+          v.cuisine.toLowerCase().includes(q) ||
+          (v.tagline ?? "").toLowerCase().includes(q),
+      );
+    }
+    return sortVenues(list, sortBy, pickupMode);
+  }, [
+    hidden,
+    favouritesOnly,
+    favourites,
+    cuisineFilter,
+    under30,
+    offersOnly,
+    topRatedOnly,
+    freeDeliveryOnly,
+    pickupMode,
+    sortBy,
+    inlineSearch,
+    anyFilterActive,
+  ]);
 
   return (
     <div className="relative flex-1 flex flex-col bg-white overflow-hidden">
@@ -233,19 +254,30 @@ export default function DiscoveryScreen() {
         <LocationBar
           unreadCount={unreadCount}
           onBellTap={() => setNotifSheetOpen(true)}
-        />
-        <DeliveryPickupTabs
-          pickupMode={pickupMode}
-          onChange={setPickupMode}
+          favouritesOnly={favouritesOnly}
+          onFavouritesTap={() => setFavouritesOnly((v) => !v)}
         />
         <FilterChipsRow
+          pickupMode={pickupMode}
+          onModeTap={() => setModeSheetOpen(true)}
           under30={under30}
           setUnder30={setUnder30}
+          topRatedOnly={topRatedOnly}
+          setTopRatedOnly={setTopRatedOnly}
+          freeDeliveryOnly={freeDeliveryOnly}
+          setFreeDeliveryOnly={setFreeDeliveryOnly}
           offersOnly={offersOnly}
           setOffersOnly={setOffersOnly}
           sortBy={sortBy}
           onSortTap={() => setSortSheetOpen(true)}
         />
+        {anyFilterActive && (
+          <InlineSearchInput
+            value={inlineSearch}
+            onChange={setInlineSearch}
+            resultCount={filteredVenues.length}
+          />
+        )}
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto pb-32">
@@ -255,24 +287,24 @@ export default function DiscoveryScreen() {
             setCuisineFilter((prev) => (prev === c ? null : c))
           }
         />
-        <HeroCategoryRow
-          active={heroFilter}
-          onSelect={(id) =>
-            setHeroFilter((prev) => (prev === id ? null : id))
-          }
-        />
-        {orderAgain.length > 0 && (
+        {orderAgain.length > 0 && !anyFilterActive && (
           <OrderAgainRail entries={orderAgain} onPick={goToVenue} />
         )}
         <RestaurantList
           venues={filteredVenues}
-          totalCount={VENUE_LIST.length}
+          totalCount={VENUE_LIST.length - Object.keys(hidden).length}
           activeFilter={cuisineFilter}
-          activeHero={heroFilter}
+          topRatedOnly={topRatedOnly}
+          freeDeliveryOnly={freeDeliveryOnly}
+          favouritesOnly={favouritesOnly}
+          favouritesCount={favourites.size}
           pickupMode={pickupMode}
+          favourites={favourites}
+          onCardActions={(v) => setActionVenue(v)}
           clearFilter={() => {
             setCuisineFilter(null);
-            setHeroFilter(null);
+            setTopRatedOnly(false);
+            setFreeDeliveryOnly(false);
           }}
           onPick={goToVenue}
         />
@@ -282,6 +314,8 @@ export default function DiscoveryScreen() {
 
       {searchOpen && (
         <SearchOverlay
+          scopedSlugs={favouritesOnly ? favourites : null}
+          scopeLabel={favouritesOnly ? "favourites" : null}
           onClose={() => setSearchOpen(false)}
           onSelectCuisine={(c) => {
             setCuisineFilter(c);
@@ -300,6 +334,33 @@ export default function DiscoveryScreen() {
             setSortSheetOpen(false);
           }}
           onClose={() => setSortSheetOpen(false)}
+        />
+      )}
+
+      {modeSheetOpen && (
+        <ModeSheet
+          pickupMode={pickupMode}
+          onPick={(pickup) => {
+            setPickupMode(pickup);
+            setModeSheetOpen(false);
+          }}
+          onClose={() => setModeSheetOpen(false)}
+        />
+      )}
+
+      {actionVenue && (
+        <CardActionSheet
+          venue={actionVenue}
+          isFavourite={favourites.has(actionVenue.slug)}
+          onToggleFavourite={() => {
+            toggleFavourite(actionVenue.slug);
+            setActionVenue(null);
+          }}
+          onHide={() => {
+            hideVenue(actionVenue.slug);
+            setActionVenue(null);
+          }}
+          onClose={() => setActionVenue(null)}
         />
       )}
 
@@ -324,87 +385,76 @@ export default function DiscoveryScreen() {
 function LocationBar({
   unreadCount,
   onBellTap,
+  favouritesOnly,
+  onFavouritesTap,
 }: {
   unreadCount: number;
   onBellTap: () => void;
+  favouritesOnly: boolean;
+  onFavouritesTap: () => void;
 }) {
   return (
-    <div className="px-4 pt-4 pb-3 flex items-center justify-between">
-      <button className="flex items-start gap-1.5 -ml-1 px-1 text-left">
-        <PinIcon className="w-5 h-5 text-brand-green mt-0.5" />
-        <div>
-          <div className="text-[11px] text-brand-muted leading-tight">
-            Deliver now
-          </div>
-          <div className="flex items-center gap-1 text-brand-ink">
-            <span className="text-[15px] font-bold leading-tight">Home</span>
-            <ChevronDownIcon className="w-4 h-4" />
-          </div>
-        </div>
+    <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2">
+      <button className="flex items-center gap-1.5 -ml-1 px-1 text-left min-w-0">
+        <PinIcon className="w-5 h-5 text-brand-green flex-shrink-0" />
+        <span className="text-[16px] font-bold text-brand-ink leading-none truncate">
+          Home
+        </span>
+        <ChevronDownIcon className="w-4 h-4 text-brand-ink flex-shrink-0" />
       </button>
-      <button
-        onClick={onBellTap}
-        aria-label="Notifications"
-        className="relative w-10 h-10 rounded-full bg-brand-canvas flex items-center justify-center"
-      >
-        <BellIcon className="w-5 h-5 text-brand-ink" />
-        {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
-      </button>
-    </div>
-  );
-}
-
-function DeliveryPickupTabs({
-  pickupMode,
-  onChange,
-}: {
-  pickupMode: boolean;
-  onChange: (pickup: boolean) => void;
-}) {
-  return (
-    <div className="px-4 pb-3 flex items-center gap-2">
-      <button
-        onClick={() => onChange(false)}
-        className={
-          "px-4 py-2 rounded-full text-[13.5px] font-bold flex items-center gap-1.5 transition-colors " +
-          (!pickupMode
-            ? "bg-brand-ink text-white"
-            : "bg-brand-canvas text-brand-ink")
-        }
-      >
-        <span aria-hidden>🛵</span>
-        Delivery
-      </button>
-      <button
-        onClick={() => onChange(true)}
-        className={
-          "px-4 py-2 rounded-full text-[13.5px] font-bold flex items-center gap-1.5 transition-colors " +
-          (pickupMode
-            ? "bg-brand-ink text-white"
-            : "bg-brand-canvas text-brand-ink")
-        }
-      >
-        <span aria-hidden>🛍️</span>
-        Pickup
-      </button>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          onClick={onFavouritesTap}
+          aria-label={favouritesOnly ? "Show all restaurants" : "Show favourites"}
+          aria-pressed={favouritesOnly}
+          className={
+            "w-10 h-10 rounded-full flex items-center justify-center transition-colors " +
+            (favouritesOnly
+              ? "bg-rose-50 text-rose-500"
+              : "bg-brand-canvas text-brand-ink")
+          }
+        >
+          <HeartIcon filled={favouritesOnly} className="w-5 h-5" />
+        </button>
+        <button
+          onClick={onBellTap}
+          aria-label="Notifications"
+          className="relative w-10 h-10 rounded-full bg-brand-canvas flex items-center justify-center"
+        >
+          <BellIcon className="w-5 h-5 text-brand-ink" />
+          {unreadCount > 0 && (
+            <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
 
 function FilterChipsRow({
+  pickupMode,
+  onModeTap,
   under30,
   setUnder30,
+  topRatedOnly,
+  setTopRatedOnly,
+  freeDeliveryOnly,
+  setFreeDeliveryOnly,
   offersOnly,
   setOffersOnly,
   sortBy,
   onSortTap,
 }: {
+  pickupMode: boolean;
+  onModeTap: () => void;
   under30: boolean;
   setUnder30: (v: boolean) => void;
+  topRatedOnly: boolean;
+  setTopRatedOnly: (v: boolean) => void;
+  freeDeliveryOnly: boolean;
+  setFreeDeliveryOnly: (v: boolean) => void;
   offersOnly: boolean;
   setOffersOnly: (v: boolean) => void;
   sortBy: SortKey;
@@ -414,6 +464,13 @@ function FilterChipsRow({
   return (
     <div className="px-4 pb-3 overflow-x-auto scrollbar-none">
       <div className="flex items-center gap-2 w-max">
+        {/* Mode chip — dropdown style, exact-one selected. Dark when pickup is
+            on (non-default) so the mode shift reads at a glance. */}
+        <Chip active={pickupMode} onClick={onModeTap}>
+          <span aria-hidden>{pickupMode ? "🛍️" : "🛵"}</span>
+          {pickupMode ? "Pickup" : "Delivery"}
+          <ChevronDownIcon className="w-3.5 h-3.5" />
+        </Chip>
         <Chip active={sortActive} onClick={onSortTap}>
           <SortIcon className="w-3.5 h-3.5" />
           {sortActive ? SORT_LABELS[sortBy] : "Sort by"}
@@ -422,15 +479,64 @@ function FilterChipsRow({
         <Chip active={under30} onClick={() => setUnder30(!under30)}>
           Under 30 min
         </Chip>
-        <Chip>Under RM3.00</Chip>
+        <Chip
+          active={topRatedOnly}
+          onClick={() => setTopRatedOnly(!topRatedOnly)}
+        >
+          <span aria-hidden>⭐</span>
+          Top rated
+        </Chip>
+        <Chip
+          active={freeDeliveryOnly}
+          onClick={() => setFreeDeliveryOnly(!freeDeliveryOnly)}
+        >
+          Free delivery
+        </Chip>
         <Chip active={offersOnly} onClick={() => setOffersOnly(!offersOnly)}>
           <TagIcon className="w-3.5 h-3.5" />
           Offers
         </Chip>
-        <Chip>
-          <FilterIcon className="w-3.5 h-3.5" />
-          Filters
-        </Chip>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Inline "narrow this list" search input. Shown beneath the filter chip row
+ * only when at least one filter is active — the bottom-rail search still
+ * exists for the full-pool search-across-menus overlay; this is the lighter
+ * "I already filtered, now type to narrow what I see" affordance that lets
+ * the user keep eyes on the list as they type.
+ */
+function InlineSearchInput({
+  value,
+  onChange,
+  resultCount,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  resultCount: number;
+}) {
+  const placeholder = `Narrow ${resultCount} restaurant${resultCount === 1 ? "" : "s"}…`;
+  return (
+    <div className="px-4 pb-3">
+      <div className="flex items-center gap-2 bg-brand-canvas rounded-full px-3.5 py-2">
+        <SearchIcon className="w-4 h-4 text-brand-muted flex-shrink-0" />
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent outline-none text-[13px] text-brand-ink placeholder:text-brand-muted min-w-0"
+        />
+        {value && (
+          <button
+            onClick={() => onChange("")}
+            aria-label="Clear search"
+            className="p-0.5 flex-shrink-0"
+          >
+            <CloseIcon className="w-4 h-4 text-brand-muted" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -510,48 +616,6 @@ function CuisineTileRow({
 }
 
 /* ------------------------------------------------------------------ */
-/*                       Hero category cards                          */
-/* ------------------------------------------------------------------ */
-
-function HeroCategoryRow({
-  active,
-  onSelect,
-}: {
-  active: HeroFilterId | null;
-  onSelect: (id: HeroFilterId) => void;
-}) {
-  return (
-    <div className="pt-2 pb-4 overflow-x-auto scrollbar-none">
-      <div className="flex items-stretch gap-3 px-4 w-max">
-        {HERO_CATEGORIES.map((c) => {
-          const isActive = active === c.id;
-          return (
-            <button
-              key={c.id}
-              onClick={() => onSelect(c.id)}
-              className={
-                "w-[150px] rounded-2xl px-4 py-4 flex flex-col gap-1 flex-shrink-0 text-left transition-all " +
-                (isActive ? c.activeBg : c.bg)
-              }
-            >
-              <div className="text-[28px] leading-none mb-1" aria-hidden>
-                {c.emoji}
-              </div>
-              <div className="text-[14px] font-bold text-brand-ink leading-tight">
-                {c.title}
-              </div>
-              <div className="text-[11.5px] text-brand-muted leading-tight">
-                {c.subtitle}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*                       Order Again rail                             */
 /* ------------------------------------------------------------------ */
 
@@ -609,41 +673,52 @@ function OrderAgainRail({
 /*                       Restaurant list                              */
 /* ------------------------------------------------------------------ */
 
-function heroHeadline(hero: HeroFilterId): string {
-  switch (hero) {
-    case "near-me":
-      return "Nearby restaurants";
-    case "top-rated":
-      return "Top rated";
-    case "free-delivery":
-      return "Free delivery";
-    case "new-arrivals":
-      return "New on Tapow";
-  }
-}
-
 function RestaurantList({
   venues,
   totalCount,
   activeFilter,
-  activeHero,
+  topRatedOnly,
+  freeDeliveryOnly,
+  favouritesOnly,
+  favouritesCount,
   pickupMode,
+  favourites,
+  onCardActions,
   clearFilter,
   onPick,
 }: {
   venues: Venue[];
   totalCount: number;
   activeFilter: Cuisine | null;
-  activeHero: HeroFilterId | null;
+  topRatedOnly: boolean;
+  freeDeliveryOnly: boolean;
+  favouritesOnly: boolean;
+  favouritesCount: number;
   pickupMode: boolean;
+  favourites: Set<string>;
+  onCardActions: (v: Venue) => void;
   clearFilter: () => void;
   onPick: (slug: string) => void;
 }) {
-  const heading = activeFilter
-    ? `${activeFilter} restaurants`
-    : activeHero
-      ? heroHeadline(activeHero)
-      : "All restaurants";
+  /* Compose heading. Favourites is a scope modifier — it appends to whatever
+     other filter is active, or stands on its own. */
+  let heading: string;
+  if (favouritesOnly) {
+    if (activeFilter) heading = `${activeFilter} favourites`;
+    else if (topRatedOnly && !freeDeliveryOnly) heading = "Top rated favourites";
+    else if (freeDeliveryOnly && !topRatedOnly) heading = "Free delivery favourites";
+    else heading = "Favourites";
+  } else if (activeFilter) {
+    heading = `${activeFilter} restaurants`;
+  } else if (topRatedOnly && !freeDeliveryOnly) {
+    heading = "Top rated";
+  } else if (freeDeliveryOnly && !topRatedOnly) {
+    heading = "Free delivery";
+  } else {
+    heading = "All restaurants";
+  }
+  const showEmptyFavouritesHint =
+    favouritesOnly && favouritesCount === 0;
   return (
     <div className="pt-1 pb-2">
       <div className="px-4 flex items-end justify-between mb-3">
@@ -653,25 +728,39 @@ function RestaurantList({
         </div>
       </div>
       {venues.length === 0 ? (
-        <div className="px-4 py-12 text-center">
-          <div className="text-[14px] text-brand-muted mb-3">
-            Nothing matches this filter.
+        showEmptyFavouritesHint ? (
+          <div className="px-6 py-12 text-center">
+            <div className="text-[15px] font-semibold text-brand-ink mb-1">
+              No favourites yet
+            </div>
+            <div className="text-[13px] text-brand-muted">
+              Tap the ⋯ on any restaurant and choose "Add to favourites" to save it here.
+            </div>
           </div>
-          <button
-            onClick={clearFilter}
-            className="text-brand-green font-semibold text-[14px]"
-          >
-            Clear filter
-          </button>
-        </div>
+        ) : (
+          <div className="px-4 py-12 text-center">
+            <div className="text-[14px] text-brand-muted mb-3">
+              Nothing matches this filter.
+            </div>
+            <button
+              onClick={clearFilter}
+              className="text-brand-green font-semibold text-[14px]"
+            >
+              Clear filter
+            </button>
+          </div>
+        )
       ) : (
-        <div className="flex flex-col gap-4 px-4">
-          {venues.map((v) => (
+        <div className="flex flex-col">
+          {venues.map((v, i) => (
             <RestaurantCard
               key={v.slug}
               venue={v}
               pickupMode={pickupMode}
+              isFavourite={favourites.has(v.slug)}
               onPick={onPick}
+              onActions={onCardActions}
+              isLast={i === venues.length - 1}
             />
           ))}
         </div>
@@ -683,71 +772,102 @@ function RestaurantList({
 function RestaurantCard({
   venue,
   pickupMode,
+  isFavourite,
   onPick,
+  onActions,
+  isLast,
 }: {
   venue: Venue;
   pickupMode: boolean;
+  isFavourite: boolean;
   onPick: (slug: string) => void;
+  onActions: (v: Venue) => void;
+  isLast: boolean;
 }) {
   const [eMin, eMax] = venue.estimatedDeliveryMinutes;
   const eta = eMin === eMax ? `${eMin} min` : `${eMin}–${eMax} min`;
   const fee =
-    venue.deliveryFee === 0 ? "Free delivery" : `${formatRM(venue.deliveryFee)} delivery`;
+    venue.deliveryFee === 0 ? "Free" : `${formatRM(venue.deliveryFee)} delivery`;
   const metaLine = pickupMode
     ? `Ready in ${venue.kitchenPrepDefaultMinutes} min · Pickup`
     : `${eta} · ${fee}`;
 
   return (
-    <button
-      onClick={() => venue.isOpen && onPick(venue.slug)}
-      disabled={!venue.isOpen}
-      className="w-full text-left"
+    <div
+      className={
+        "relative px-4 py-3 flex gap-3 items-start " +
+        (isLast ? "" : "border-b border-gray-100")
+      }
     >
-      <div className="relative rounded-2xl overflow-hidden bg-brand-canvas aspect-[16/10] mb-2">
-        <img
-          src={venue.heroImage}
-          alt=""
-          className={
-            "w-full h-full object-cover " + (venue.isOpen ? "" : "opacity-40")
-          }
-          loading="lazy"
-        />
-        {venue.hasOffer && venue.isOpen && (
-          <div
-            className="absolute top-3 left-3 px-2 py-1 rounded text-[11px] font-bold text-white"
-            style={{ background: venue.hasOffer.pillColor ?? "#DC2626" }}
-          >
-            {venue.hasOffer.label}
-          </div>
-        )}
-        {!venue.isOpen && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-white/95 px-4 py-2 rounded-full text-[12.5px] font-bold text-brand-ink">
-              Currently closed
+      <button
+        onClick={() => venue.isOpen && onPick(venue.slug)}
+        disabled={!venue.isOpen}
+        className="flex-1 min-w-0 text-left flex gap-3 items-start"
+      >
+        <div className="relative w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-brand-canvas">
+          <img
+            src={venue.heroImage}
+            alt=""
+            className={
+              "w-full h-full object-cover " + (venue.isOpen ? "" : "opacity-40")
+            }
+            loading="lazy"
+          />
+          {venue.hasOffer && venue.isOpen && (
+            <div
+              className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold text-white leading-tight max-w-[100px] truncate"
+              style={{ background: venue.hasOffer.pillColor ?? "#DC2626" }}
+            >
+              {venue.hasOffer.label}
             </div>
-          </div>
-        )}
-      </div>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[16px] font-extrabold text-brand-ink leading-tight truncate">
+          )}
+          {isFavourite && (
+            <div className="absolute bottom-1.5 left-1.5 w-6 h-6 rounded-full bg-white/95 flex items-center justify-center shadow-sm">
+              <HeartIcon
+                filled
+                className="w-3.5 h-3.5 text-rose-500"
+              />
+            </div>
+          )}
+          {!venue.isOpen && (
+            <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
+              <span className="text-white text-[10px] font-bold uppercase tracking-wide">
+                Closed
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0 py-0.5 pr-8">
+          <div className="text-[15px] font-extrabold text-brand-ink leading-tight truncate">
             {venue.name}
           </div>
           <div className="flex items-center gap-1.5 text-[12px] text-brand-muted mt-1">
-            <StarIcon className="text-amber-500" />
+            <StarIcon className="text-amber-500 w-3.5 h-3.5" />
             <span className="font-semibold text-brand-ink">
               {venue.rating.toFixed(1)}
             </span>
             <span>({formatRatingCount(venue.ratingCount)})</span>
             <Dot />
-            <span>{venue.cuisine}</span>
-            <Dot />
             <span>{"$".repeat(venue.priceTier)}</span>
+            <Dot />
+            <span className="truncate">{venue.cuisine}</span>
           </div>
-          <div className="text-[12px] text-brand-muted mt-1">{metaLine}</div>
+          <div className="text-[12px] text-brand-muted mt-0.5 truncate">
+            {metaLine}
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onActions(venue);
+        }}
+        aria-label={`Actions for ${venue.name}`}
+        className="absolute top-2 right-2 w-9 h-9 rounded-full flex items-center justify-center text-brand-muted hover:bg-black/5"
+      >
+        <KebabIcon className="w-5 h-5" />
+      </button>
+    </div>
   );
 }
 
@@ -847,6 +967,174 @@ function SortSheet({
               </button>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*                            Mode sheet                              */
+/* ------------------------------------------------------------------ */
+
+function ModeSheet({
+  pickupMode,
+  onPick,
+  onClose,
+}: {
+  pickupMode: boolean;
+  onPick: (pickup: boolean) => void;
+  onClose: () => void;
+}) {
+  useEscapeToClose(onClose);
+  const options: { value: boolean; label: string; sub: string; emoji: string }[] =
+    [
+      {
+        value: false,
+        label: "Delivery",
+        sub: "Brought to your door",
+        emoji: "🛵",
+      },
+      {
+        value: true,
+        label: "Pickup",
+        sub: "Collect from the venue",
+        emoji: "🛍️",
+      },
+    ];
+  return (
+    <div className="absolute inset-0 z-40 flex items-end bg-black/40">
+      <button
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0"
+      />
+      <div
+        className="relative bg-white w-full rounded-t-2xl pb-7"
+        style={{ animation: "sheetUp 0.22s ease-out" }}
+      >
+        <div className="flex items-center justify-between px-5 pt-5 pb-4">
+          <div className="text-[18px] font-bold text-brand-ink">
+            How would you like it?
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1 -mr-1 -mt-1"
+          >
+            <CloseIcon className="w-6 h-6 text-brand-ink" />
+          </button>
+        </div>
+        <div className="flex flex-col">
+          {options.map((opt) => {
+            const selected = opt.value === pickupMode;
+            return (
+              <button
+                key={opt.label}
+                onClick={() => onPick(opt.value)}
+                className="flex items-center justify-between gap-3 px-5 py-3.5 active:bg-brand-canvas text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-[22px] leading-none" aria-hidden>
+                    {opt.emoji}
+                  </span>
+                  <div>
+                    <div className="text-[15px] font-semibold text-brand-ink leading-tight">
+                      {opt.label}
+                    </div>
+                    <div className="text-[12.5px] text-brand-muted leading-tight mt-0.5">
+                      {opt.sub}
+                    </div>
+                  </div>
+                </div>
+                {selected && (
+                  <CheckIcon className="w-5 h-5 text-brand-green flex-shrink-0" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*                         Card action sheet                          */
+/* ------------------------------------------------------------------ */
+
+function CardActionSheet({
+  venue,
+  isFavourite,
+  onToggleFavourite,
+  onHide,
+  onClose,
+}: {
+  venue: Venue;
+  isFavourite: boolean;
+  onToggleFavourite: () => void;
+  onHide: () => void;
+  onClose: () => void;
+}) {
+  useEscapeToClose(onClose);
+  return (
+    <div className="absolute inset-0 z-40 flex items-end bg-black/40">
+      <button
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0"
+      />
+      <div
+        className="relative bg-white w-full rounded-t-2xl pb-7"
+        style={{ animation: "sheetUp 0.22s ease-out" }}
+      >
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <div className="min-w-0">
+            <div className="text-[16px] font-bold text-brand-ink truncate">
+              {venue.name}
+            </div>
+            <div className="text-[12.5px] text-brand-muted">
+              {venue.cuisine} · {"$".repeat(venue.priceTier)}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1 -mr-1 -mt-1 flex-shrink-0"
+          >
+            <CloseIcon className="w-6 h-6 text-brand-ink" />
+          </button>
+        </div>
+        <div className="flex flex-col">
+          <button
+            onClick={onToggleFavourite}
+            className="flex items-center gap-3 px-5 py-3.5 active:bg-brand-canvas text-left"
+          >
+            <HeartIcon
+              filled={isFavourite}
+              className={
+                "w-5 h-5 flex-shrink-0 " +
+                (isFavourite ? "text-rose-500" : "text-brand-ink")
+              }
+            />
+            <span className="text-[15px] font-semibold text-brand-ink">
+              {isFavourite ? "Remove from favourites" : "Add to favourites"}
+            </span>
+          </button>
+          <button
+            onClick={onHide}
+            className="flex items-start gap-3 px-5 py-3.5 active:bg-brand-canvas text-left"
+          >
+            <EyeSlashIcon className="w-5 h-5 text-brand-ink flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[15px] font-semibold text-brand-ink leading-tight">
+                Hide this restaurant
+              </div>
+              <div className="text-[12.5px] text-brand-muted leading-tight mt-0.5">
+                You won't see it for 30 days
+              </div>
+            </div>
+          </button>
         </div>
       </div>
     </div>
