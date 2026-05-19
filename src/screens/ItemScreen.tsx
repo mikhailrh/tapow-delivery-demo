@@ -10,7 +10,11 @@ import { useNav } from "../context/NavContext";
 import { useStock } from "../context/StockContext";
 import { useVenue } from "../context/VenueContext";
 import { formatRM } from "../lib/money";
-import { ChevronDownIcon, CloseIcon } from "../components/icons";
+import { ChevronDownIcon, CloseIcon, HeartIcon } from "../components/icons";
+import {
+  readDishFavourites,
+  toggleDishFavourite,
+} from "../lib/dishFavourites";
 
 function defaultSelections(groups: ModifierGroup[] | undefined): Selections {
   const out: Selections = {};
@@ -46,6 +50,13 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
   const [unavailableAction, setUnavailableAction] =
     useState<UnavailableAction>("remove");
   const [qty, setQty] = useState(1);
+  const [isFavourite, setIsFavourite] = useState(() =>
+    readDishFavourites().has(itemId),
+  );
+  const toggleFav = () => {
+    const next = toggleDishFavourite(itemId);
+    setIsFavourite(next.has(itemId));
+  };
 
   if (!item) {
     return (
@@ -116,6 +127,19 @@ export default function ItemScreen({ itemId }: { itemId: string }) {
         className="absolute top-4 left-4 z-20 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-md"
       >
         <CloseIcon className="w-5 h-5 text-brand-ink" />
+      </button>
+      <button
+        onClick={toggleFav}
+        aria-label={isFavourite ? `Remove ${item.name} from favourites` : `Add ${item.name} to favourites`}
+        aria-pressed={isFavourite}
+        className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-md"
+      >
+        <HeartIcon
+          filled={isFavourite}
+          className={
+            "w-5 h-5 " + (isFavourite ? "text-rose-500" : "text-brand-ink")
+          }
+        />
       </button>
 
       <div className="flex-1 overflow-y-auto pb-36">

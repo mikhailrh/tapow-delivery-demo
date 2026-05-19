@@ -18,13 +18,17 @@ import type { Order } from "../lib/orders";
 import {
   MenuIcon,
   SearchIcon,
-  PlusIcon,
   CloseIcon,
   BackIcon,
   ClockIcon,
   RotateIcon,
   ChevronDownIcon,
+  HeartIcon,
 } from "../components/icons";
+import {
+  readDishFavourites,
+  toggleDishFavourite,
+} from "../lib/dishFavourites";
 
 function backToDiscovery() {
   if (typeof window === "undefined") return;
@@ -88,8 +92,9 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
     setScrolled((prev) => (top > 30 === prev ? prev : top > 30));
 
     const threshold = top + SCROLL_SPY_OFFSET;
-    let next = MENU[0].id;
-    for (const cat of MENU) {
+    if (displayMenu.length === 0) return;
+    let next = displayMenu[0].id;
+    for (const cat of displayMenu) {
       const section = sectionRefs.current[cat.id];
       if (!section) continue;
       if (section.offsetTop <= threshold) next = cat.id;
@@ -140,6 +145,36 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
   const [activeCat, setActiveCat] = useState<string>(jumpTo ?? MENU[0].id);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
+  const [favouritesOnly, setFavouritesOnly] = useState(false);
+  const [dishFavourites, setDishFavourites] = useState<Set<string>>(() =>
+    readDishFavourites(),
+  );
+
+  const toggleFav = (itemId: string) => {
+    setDishFavourites(toggleDishFavourite(itemId));
+  };
+
+  /* Pre-compute the favourites-filtered menu when the toggle is on so the
+     scroll-spy, category strip and section-pinning all operate on the same
+     shape they expect — an array of categories with items[]. Categories with
+     0 favourites drop out of both the strip and the body. */
+  const displayMenu: MenuCategory[] = useMemo(() => {
+    if (!favouritesOnly) return MENU;
+    return MENU.map((cat) => ({
+      ...cat,
+      items: cat.items.filter((it) => dishFavourites.has(it.id)),
+    })).filter((cat) => cat.items.length > 0);
+  }, [MENU, favouritesOnly, dishFavourites]);
+
+  /* When the active category gets filtered out by the favourites toggle, snap
+     the active category to the first remaining one so the sticky strip's
+     highlight doesn't point at a vanished section. */
+  useEffect(() => {
+    if (displayMenu.length === 0) return;
+    if (!displayMenu.some((c) => c.id === activeCat)) {
+      setActiveCat(displayMenu[0].id);
+    }
+  }, [displayMenu, activeCat]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
@@ -159,7 +194,9 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     const out: { item: MenuItem; categoryName: string }[] = [];
-    for (const cat of MENU) {
+    /* Search scopes to whatever the menu is currently filtered to —
+       favourites-only stays favourites-only inside search. */
+    for (const cat of displayMenu) {
       for (const item of cat.items) {
         if (!q) {
           out.push({ item, categoryName: cat.name });
@@ -170,7 +207,7 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
       }
     }
     return out;
-  }, [query, MENU]);
+  }, [query, displayMenu]);
 
   const pickCategory = (id: string) => {
     const section = sectionRefs.current[id];
@@ -261,6 +298,8 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
             <SearchBody
               query={query}
               results={searchResults}
+              dishFavourites={dishFavourites}
+              onToggleFavourite={toggleFav}
               onPick={(id) => go({ name: "item", itemId: id })}
             />
           </div>
@@ -384,7 +423,7 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
                 className="scrollbar-none overflow-x-auto"
               >
                 <div className="flex gap-5 px-4 whitespace-nowrap">
-                  {MENU.filter((cat) => cat.name).map((cat) => {
+                  {displayMenu.filter((cat) => cat.name).map((cat) => {
                     const isActive = cat.id === activeCat;
                     return (
                       <button
@@ -412,40 +451,46 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
             </div>
 
             <section className="pb-28">
-              {MENU.map((cat, i) => (
-                <div
-                  key={cat.id}
-                  ref={(el) => {
-                    sectionRefs.current[cat.id] = el;
-                  }}
-                >
-                  {i > 0 && <div className="h-2 bg-brand-canvas" />}
-                  <div className="px-4 pt-4">
-                    {cat.name && (
-                      <h3 className="text-[20px] font-bold text-brand-ink mb-1">
-                        {cat.name}
-                      </h3>
-                    )}
-                    {cat.items.map((item) => (
-                      <ItemRow
-                        key={item.id}
-                        item={item}
-                        available={isItemAvailable(item.id)}
-                        onPick={() =>
-                          isItemAvailable(item.id)
-                            ? go({ name: "item", itemId: item.id })
-                            : undefined
-                        }
-                      />
-                    ))}
-                    {cat.note && (
-                      <p className="text-[12px] text-brand-muted italic pt-2 pb-1">
-                        {cat.note}
-                      </p>
-                    )}
+              {displayMenu.length === 0 && favouritesOnly ? (
+                <EmptyFavouritesState />
+              ) : (
+                displayMenu.map((cat, i) => (
+                  <div
+                    key={cat.id}
+                    ref={(el) => {
+                      sectionRefs.current[cat.id] = el;
+                    }}
+                  >
+                    {i > 0 && <div className="h-2 bg-brand-canvas" />}
+                    <div className="px-4 pt-4">
+                      {cat.name && (
+                        <h3 className="text-[20px] font-bold text-brand-ink mb-1">
+                          {cat.name}
+                        </h3>
+                      )}
+                      {cat.items.map((item) => (
+                        <ItemRow
+                          key={item.id}
+                          item={item}
+                          available={isItemAvailable(item.id)}
+                          isFavourite={dishFavourites.has(item.id)}
+                          onToggleFavourite={() => toggleFav(item.id)}
+                          onPick={() =>
+                            isItemAvailable(item.id)
+                              ? go({ name: "item", itemId: item.id })
+                              : undefined
+                          }
+                        />
+                      ))}
+                      {cat.note && (
+                        <p className="text-[12px] text-brand-muted italic pt-2 pb-1">
+                          {cat.note}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </section>
           </div>
 
@@ -495,6 +540,24 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
                 </div>
               </div>
               <button
+                aria-label={
+                  favouritesOnly
+                    ? "Show full menu"
+                    : "Show favourite dishes only"
+                }
+                aria-pressed={favouritesOnly}
+                className="p-1"
+                onClick={() => setFavouritesOnly((v) => !v)}
+              >
+                <HeartIcon
+                  filled={favouritesOnly}
+                  className={
+                    "w-6 h-6 " +
+                    (favouritesOnly ? "text-rose-500" : "text-brand-ink")
+                  }
+                />
+              </button>
+              <button
                 aria-label="Search"
                 className="p-1 -mr-1"
                 onClick={() => setSearching(true)}
@@ -525,7 +588,7 @@ function MenuScreenInner({ jumpTo }: { jumpTo?: string }) {
       {/* Category drawer */}
       {drawerOpen && (
         <CategoryDrawer
-          menu={MENU}
+          menu={displayMenu}
           etaLabel={`${venue.estimatedDeliveryMinutes[0]}–${venue.estimatedDeliveryMinutes[1]} min`}
           activeCat={activeCat}
           onClose={() => setDrawerOpen(false)}
@@ -693,107 +756,148 @@ function reorderItemLabel(order: Order): string {
   return `${names[0]}, ${names[1]}, +${names.length - 2}`;
 }
 
+function EmptyFavouritesState() {
+  return (
+    <div className="px-6 pt-12 pb-8 text-center">
+      <div className="w-12 h-12 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-3">
+        <HeartIcon className="w-6 h-6 text-rose-400" />
+      </div>
+      <div className="text-[16px] font-semibold text-brand-ink mb-1">
+        No favourite dishes yet
+      </div>
+      <div className="text-[13px] text-brand-muted leading-snug">
+        Tap the heart on any dish — it'll show up here for instant access next time.
+      </div>
+    </div>
+  );
+}
+
 function ItemRow({
   item,
   onPick,
+  isFavourite,
+  onToggleFavourite,
   available = true,
 }: {
   item: MenuItem;
   onPick: () => void;
+  isFavourite: boolean;
+  onToggleFavourite: () => void;
   available?: boolean;
 }) {
+  /* Whole row is the open-detail target. The heart is a separate tap target
+     nested inside; stopPropagation keeps a fav-toggle from also navigating. */
   return (
-    <button
-      onClick={available ? onPick : undefined}
-      disabled={!available}
+    <div
       className={
-        "w-full text-left py-4 border-b border-gray-100 flex items-start gap-3 " +
-        (available ? "" : "cursor-not-allowed")
+        "relative w-full py-4 border-b border-gray-100 flex items-start gap-3 " +
+        (available ? "" : "opacity-90")
       }
     >
-      <div className="flex-1 min-w-0">
-        <div
-          className={
-            "font-semibold text-[15px] flex items-center gap-2 " +
-            (available ? "text-brand-ink" : "text-brand-muted")
-          }
-        >
-          {item.name}
-          {item.badge && (
-            <span className="inline-block bg-brand-green/10 text-brand-green text-[10px] font-semibold px-1.5 py-0.5 rounded">
-              {item.badge}
-            </span>
-          )}
-          {!available && (
-            <span className="inline-block bg-gray-200 text-brand-muted text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide">
-              Sold out
-            </span>
-          )}
-        </div>
-        <div
-          className={
-            "text-[14px] mt-0.5 " +
-            (available ? "text-brand-ink" : "text-brand-muted line-through")
-          }
-        >
-          {formatRM(item.price)}
-          {item.modifierGroups?.some((g) => g.kind === "size") && (
-            <span className="text-brand-muted text-[12px]"> · from</span>
-          )}
-        </div>
-        {item.description && (
-          <p
-            className={
-              "text-[13px] leading-snug mt-1 line-clamp-2 " +
-              (available ? "text-brand-muted" : "text-brand-muted/70")
-            }
-          >
-            {item.description}
-          </p>
-        )}
-      </div>
-      <div
+      <button
+        onClick={available ? onPick : undefined}
+        disabled={!available}
         className={
-          "flex-shrink-0 pt-1 " + (available ? "" : "opacity-30 grayscale")
+          "flex-1 min-w-0 text-left flex items-start gap-3 " +
+          (available ? "" : "cursor-not-allowed")
         }
       >
-        {item.image ? (
-          <div className="relative w-20 h-20 rounded-lg overflow-hidden bg-brand-canvas">
-            <img
-              src={item.image}
-              alt={item.name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-            {available && (
-              <div
-                className="absolute bottom-1 right-1 w-7 h-7 rounded-full bg-white flex items-center justify-center shadow-md"
-                aria-label={`Add ${item.name}`}
-              >
-                <PlusIcon className="w-4 h-4 text-brand-ink" />
-              </div>
+        <div className="flex-1 min-w-0 pr-2">
+          <div
+            className={
+              "font-semibold text-[15px] flex items-center gap-2 " +
+              (available ? "text-brand-ink" : "text-brand-muted")
+            }
+          >
+            {item.name}
+            {item.badge && (
+              <span className="inline-block bg-brand-green/10 text-brand-green text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                {item.badge}
+              </span>
+            )}
+            {!available && (
+              <span className="inline-block bg-gray-200 text-brand-muted text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide">
+                Sold out
+              </span>
             )}
           </div>
-        ) : (
           <div
-            className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center shadow-sm"
-            aria-label={`Add ${item.name}`}
+            className={
+              "text-[14px] mt-0.5 " +
+              (available ? "text-brand-ink" : "text-brand-muted line-through")
+            }
           >
-            <PlusIcon className="w-5 h-5 text-brand-ink" />
+            {formatRM(item.price)}
+            {item.modifierGroups?.some((g) => g.kind === "size") && (
+              <span className="text-brand-muted text-[12px]"> · from</span>
+            )}
+          </div>
+          {item.description && (
+            <p
+              className={
+                "text-[13px] leading-snug mt-1 line-clamp-2 " +
+                (available ? "text-brand-muted" : "text-brand-muted/70")
+              }
+            >
+              {item.description}
+            </p>
+          )}
+        </div>
+        {item.image && (
+          <div
+            className={
+              "flex-shrink-0 pt-1 " +
+              (available ? "" : "opacity-30 grayscale")
+            }
+          >
+            <div className="relative w-28 h-28 rounded-xl overflow-hidden bg-brand-canvas">
+              <img
+                src={item.image}
+                alt={item.name}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            </div>
           </div>
         )}
-      </div>
-    </button>
+      </button>
+      {/* Heart toggle — top-3 right-1.5 in both variants so the y-axis lines
+          up with the title row regardless of whether the item has an image. */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavourite();
+        }}
+        aria-label={isFavourite ? `Remove ${item.name} from favourites` : `Add ${item.name} to favourites`}
+        aria-pressed={isFavourite}
+        className={
+          "absolute top-3 right-1.5 w-7 h-7 rounded-full flex items-center justify-center " +
+          (item.image ? "bg-white/95 shadow-md" : "")
+        }
+      >
+        <HeartIcon
+          filled={isFavourite}
+          className={
+            "w-4 h-4 " +
+            (isFavourite ? "text-rose-500" : "text-brand-ink/70")
+          }
+        />
+      </button>
+    </div>
   );
 }
 
 function SearchBody({
   query,
   results,
+  dishFavourites,
+  onToggleFavourite,
   onPick,
 }: {
   query: string;
   results: { item: MenuItem; categoryName: string }[];
+  dishFavourites: Set<string>;
+  onToggleFavourite: (id: string) => void;
   onPick: (id: string) => void;
 }) {
   const { isItemAvailable } = useStock();
@@ -829,6 +933,8 @@ function SearchBody({
               key={item.id}
               item={item}
               available={isItemAvailable(item.id)}
+              isFavourite={dishFavourites.has(item.id)}
+              onToggleFavourite={() => onToggleFavourite(item.id)}
               onPick={() => onPick(item.id)}
             />
           ))}
