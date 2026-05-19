@@ -278,7 +278,7 @@ type MenuItem = {
 - heatOnly items require heat
 - everything else has no required choices
 
-Currently only one item has imagery: `Bone In` uses `/images/off-the-hook.jpeg` (placeholder borrowed from the Off The Hook sandwich photo shoot). All other items render a tall white space at the top — by design until real photography lands.
+FowlBoys' `Bone In` uses `/images/off-the-hook.jpeg`. Goojiburg's smashburger + chicken-burger heroes use Unsplash placeholder URLs. Bar Abong has four real shots on disk under `public/images/bar-abong/` (`local-sole.jpg`, `fish-sandwich.jpg`, `stingray-sambal.jpg`, `jicama-squid-ball.jpg`) wired onto those four items and the venue hero (Local Sole). Every other item renders a tall white space at the top — by design until real photography lands.
 
 ---
 
@@ -295,7 +295,7 @@ Delivery fee   RM5     (waived on pickup)
 
 **Two fees, two surfaces:** the customer sees only the 1% **platform fee**. The 10% you'll see in pitch decks is Tapow's **commission on the vendor** — vendor-side accounting only, deducted from the vendor's payout, **never surfaced on the customer's summary or receipt**. The demo currently does not model the vendor commission anywhere on screen; if a "your payout = order total − Tapow commission" view is needed on the vendor surface, that's a separate build.
 
-The persisted Order field is `platformFee` (renamed from `serviceCharge` when the model was clarified — see `SEED_FLAG_SUFFIX = "everSeeded.v5"` in [src/context/OrdersContext.tsx](src/context/OrdersContext.tsx), which forces a one-time re-seed on existing browsers so old 10% values get replaced).
+The persisted Order field is `platformFee` (renamed from `serviceCharge` when the model was clarified). `SEED_FLAG_SUFFIX` in [src/context/OrdersContext.tsx](src/context/OrdersContext.tsx) gets bumped (currently `"everSeeded.v6"`) any time the persisted `Order` shape changes so existing browsers re-seed once instead of rendering stale data.
 
 `formatRM(n)` → `"RM39.00"` (always 2dp, no thousand separators).
 
@@ -430,7 +430,7 @@ On phones / tablets the frame fills the viewport. On desktop it locks to the dev
 Removed (now built): real refund flow, address picker, customer cancellation, push-back ETA, vendor → customer messaging, operating hours and schedule, end-of-day close-out, tax receipt with venue-controlled tax info, delivery minimum, promotions, two-component ETA model, kitchen prep default editor, vendor edit-order flow.
 
 Still gaps:
-1. **Real photography.** Only `Bone In` has an image. Every other item screen renders a tall white block. Replace `MenuItem.image` paths when FowlBoys provides shots.
+1. **Real photography.** Bar Abong has four shots on disk; FowlBoys' Bone In has the one local image; everything else uses Unsplash placeholders or renders a tall white block. Replace `MenuItem.image` paths as more real photography lands.
 2. **Real Stripe** behind Place Order. `Card •••• 4242` is a placeholder. Production uses Stripe (not Billplz, despite earlier doc references); see the upcharge-handling flag at the top of this section for the broader payment-flow plan.
 3. **Real WhatsApp Business API** for the receipt + status updates. The customer's chat is mocked.
 4. **Real Lalamove** for driver dispatch. Currently faked at Accept time with one of four pool drivers; the two driver legs are mocked at order creation with fixed random ranges.
@@ -478,7 +478,7 @@ Forked from the single-tenant FowlBoys × Tapow pitch demo. Pass 1 makes the app
 
 ### Next pass — menu schema refactor
 
-The `MenuItem` shape ([src/data/menu.ts](src/data/menu.ts)) is FowlBoys-specific — `combo` (heat + dip + side), `heatOnly` (sandwich heat picker), `sizes` (bone-in / tenders / wings piece counts), per-piece heat upcharges, and a global `HEAT_LEVELS / DIPS / SIDES` enum. Both venues currently share this menu as a placeholder; noko-noko will need its own items. Pass 2 generalizes the menu so any venue can express its modifier groups (heat, sauce, size, doneness, custom add-on lists) without baking FowlBoys assumptions into the schema or into ItemScreen / CartScreen / VendorOrderCard rendering. Likely shape: `MenuItem.modifierGroups: ModifierGroup[]` where each group has `{ id, label, required, multi?, max?, options: { id, label, priceDelta }[] }`. ItemScreen validation, cart line snapshots, and stock toggles all need to swap their FowlBoys-shaped reads for the generic shape.
+*(Historical note — kept because the surrounding section explains the Pass 1 → Pass 2 motivation. The schema has since been generalized; current shape is documented under "Modifier-group schema" below.)* The original `MenuItem` shape was FowlBoys-specific — `combo` (heat + dip + side), `heatOnly` (sandwich heat picker), `sizes` (bone-in / tenders / wings piece counts), per-piece heat upcharges, and a global `HEAT_LEVELS / DIPS / SIDES` enum. Pass 2 generalized this so any venue can express its modifier groups (heat, sauce, size, doneness, custom add-on lists) without baking FowlBoys assumptions into the schema or into ItemScreen / CartScreen / VendorOrderCard rendering. The resulting shape is `MenuItem.modifierGroups: ModifierGroup[]`.
 
 ---
 
@@ -492,14 +492,14 @@ Tapow is WhatsApp-native: customers tap a link or scan a QR to land on this app 
 
 ### Venue catalog
 
-[src/data/venues/index.ts](src/data/venues/index.ts) carries 13 venues — Goojiburg (KK smashburger spot, real menu, top-of-list at 5.0 rating), FowlBoys (KL, full menu), Noko Noko (agave bar in Plaza Damansara), and 10 KK venues (Alu-Alu Kitchen, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy KK, Kohinoor, Biru Biru Cafe, El Centro, Octoverse Coffee). Each venue carries discovery-card metadata: `cuisine`, `priceTier` (1–3), `rating`, `ratingCount`, `estimatedDeliveryMinutes` tuple, `deliveryFee`, `heroImage` (Unsplash with stable photo IDs), `isOpen`, optional `hasOffer`. FowlBoys, Kohinoor, Goojiburg, and Alu-Alu Kitchen have populated menus; the other 9 carry `menu: []`.
+[src/data/venues/index.ts](src/data/venues/index.ts) carries 14 venues — Bar Abong (KK Waterfront, modern Seafood small-plates, pinned to top of discovery via stable rating-desc sort tied with Goojiburg), Goojiburg (KK smashburger spot, real menu, 5.0 rating), FowlBoys (KL, full menu), Noko Noko (agave bar in Plaza Damansara), and 10 KK venues (Alu-Alu Kitchen, Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy KK, Kohinoor, Biru Biru Cafe, El Centro, Octoverse Coffee). Each venue carries discovery-card metadata: `cuisine`, `priceTier` (1–3), `rating`, `ratingCount`, `estimatedDeliveryMinutes` tuple, `deliveryFee`, `heroImage` (Unsplash placeholders for most; Bar Abong uses a local jpg), `isOpen`, optional `hasOffer`, optional `lat`/`lng` (populated only for Bar Abong today), optional `cashAccepted` + `acceptedPaymentMethods` (populated only for Bar Abong, which is card-only). Bar Abong, FowlBoys, Kohinoor, Goojiburg, and Alu-Alu Kitchen have populated menus; the other 9 carry `menu: []`.
 
 ### Discovery layout
 
 [src/screens/discovery/DiscoveryScreen.tsx](src/screens/discovery/DiscoveryScreen.tsx), top to bottom:
 
-- **Sticky top**: location bar (Deliver now / Home + chevron-down + notification bell), Delivery/Pickup tabs (Pickup is visual-only), filter-chip row (Sort by · Under 30 min · Under RM3.00 · Offers · Filters — Under 30 min and Offers actually filter the list, the rest are visual).
-- **Scrollable body**: cuisine tile row (10 emoji tiles, ordered to surface populated cuisines first; tap toggles a filter), hero category cards (Near Me / Top Rated / Free Delivery / New on Tapow — visual only), conditional Order Again rail, restaurant list.
+- **Sticky top**: single-line location pill (📍 Home + chevron) on the left; `❤ Favourites` toggle button + 🔔 notification bell on the right (both 40px round, canvas bg). Below that, the unified filter-chip row: `🛵 Delivery ⌄` *(opens mode sheet — Delivery / Pickup, exact-one)* · `Sort by ⌄` · `Under 30 min` · `⭐ Top rated` · `Free delivery` · `🏷️ Offers`. Mode + Sort are dropdown chips (open bottom sheets); the rest are independent boolean filter chips that AND together. The favourites toggle is a scope modifier — it ANDs with everything else; heading composes ("Italian favourites" / "Top rated favourites" / etc.).
+- **Scrollable body**: cuisine tile row (10 emoji tiles, ordered to surface populated cuisines first; tap toggles a filter), conditional Order Again rail, restaurant list.
 - **Sticky bottom**: floating Uber Eats-style rail — home + pin + centered search field + cart + profile. Only the search field is wired; tapping it opens the search overlay. There is no top-bar search trigger; the bottom rail is the single search entry point.
 
 Restaurant cards show hero image with optional offer pill (top-left), name, star rating + cuisine + price-tier dollar signs, ETA + delivery fee. Closed venues dim and sink to the bottom of the list with a "Currently closed" pill overlay.
@@ -524,12 +524,13 @@ Reads `tapow.<slug>.orders.v1` from localStorage for every venue in `VENUES`, su
 
 ### Per-venue menus
 
-Menus live in [src/data/menus/](src/data/menus/) — one file per venue, each exporting a `MenuCategory[]`. Four are populated today:
+Menus live in [src/data/menus/](src/data/menus/) — one file per venue, each exporting a `MenuCategory[]`. Five are populated today:
 
 - **[src/data/menus/fowlboys.ts](src/data/menus/fowlboys.ts)** — combo items (Bone In, Tenders, Wings) with four required modifier groups (size, heat, dip, side). Heat options on Xtra/XX Hot tiers carry `priceDelta: 2.5` with `perPiece: true` — the size group's selected `pieces` multiply the upcharge, so 3 pieces XX Hot = +RM 7.50. heatOnly items (sandwiches) have just the heat group. Pasta and house salad have an optional add-on group.
 - **[src/data/menus/kohinoor.ts](src/data/menus/kohinoor.ts)** — 32 categories, ~190 items, transcribed from foodpanda. No modifier groups (modifiers absent in source). Items render as price-only entries.
 - **[src/data/menus/goojiburg.ts](src/data/menus/goojiburg.ts)** — KK smashburger spot, 3 categories, 10 items. Beef burgers carry a beef add-ons group (multi, max 6) + a combo group (multi, max 1). Chicken burgers carry their own add-ons group + the same combo group. The schema's `max` enforces foodpanda's "select up to 1" rule.
 - **[src/data/menus/alu-alu-kitchen.ts](src/data/menus/alu-alu-kitchen.ts)** — Chinese seafood, 17 categories, ~75 base items. Stress-tests the schema with three new patterns: (1) **Small/Medium pricing** as a required size group with item-specific deltas (used by 13 categories); (2) **matrix-priced sections** (Noodles 6×7, Noodle Soup 5×7, Live Fish 6×5, Live Prawn 3×2) modeled as one item per cooking style with a shared required modifier for the variable axis (protein/fish/prawn type) — base price = cheapest variant, deltas walk up to the most expensive, no item explosion; (3) **per-kg / seasonal items** keep representative pricing with a description note that the kitchen confirms by weight or market on the day. A few one-offs: half-chicken items skip the size group; CR05 (Singapore Chilli Crab) carries an optional "+RM 5 mantou (4 pcs)" add-on; R02 has an optional "Upgrade to snapper +RM 2".
+- **[src/data/menus/bar-abong.ts](src/data/menus/bar-abong.ts)** — modern Seafood small-plates (cuisine `"Seafood"`), 5 sections transcribed literally from the printed menu (snacks → Land → Sea → desserts → Drinks). The opening snacks block and closing desserts block carry empty `name: ""` strings — the source menu had no header on either, and MenuScreen / SearchOverlay skip rendering category names when empty. Four items carry `containsAlcohol: true` (the ▲ glyph items). Drinks category carries `note` ("Bottles displayed in fridge / By the glass displayed on the board") rendered as italic muted text under the items. Four items have real photography on disk (Local Sole, Fish Sandwich, Stingray Sambal, Jicama Squid Ball).
 
 Each `Venue` carries its menu through `venue.menu`; the customer flow reads from there rather than a static import. [src/screens/MenuScreen.tsx](src/screens/MenuScreen.tsx) and [src/screens/ItemScreen.tsx](src/screens/ItemScreen.tsx) read from `useVenue().menu`; `findMenuItem` and `CategoryDrawer` take the menu as a parameter / prop. The 9 still-empty venues fall through to the `ComingSoon` placeholder via the `venue.menu.length === 0` gate.
 
@@ -609,7 +610,7 @@ The discovery body scrolls inside an `overflow-y-auto` div, not the document, so
 
 ### New icons
 
-[src/components/icons.tsx](src/components/icons.tsx) gained `HomeIcon`, `UserIcon`, `StarIcon` (filled), `FilterIcon`, `SortIcon`, `ShoppingBagIcon`, `TagIcon`.
+[src/components/icons.tsx](src/components/icons.tsx) gained `HomeIcon`, `UserIcon`, `StarIcon` (filled), `FilterIcon`, `SortIcon`, `ShoppingBagIcon`, `TagIcon`. (FilterIcon is unused since the UX-density pass dropped the "Filters" chip; left in icons.tsx in case a real filters sheet is wired later.)
 
 ### Discovery polish — Pass 3
 
@@ -618,21 +619,80 @@ Wired the four chrome elements that were originally placeholder on the discovery
 - **Pickup tab** is now stateful (paired with Delivery). When pickup is on, restaurant cards swap their meta line from `"25–35 min · RM5 delivery"` to `"Ready in {kitchenPrepDefaultMinutes} min · Pickup"`, the Under-30 chip filters by prep minutes instead of delivery ETA, the Sort sheet's time option re-labels to "Pickup time", and the delivery-fee sort option is hidden (irrelevant in pickup mode).
 - **Sort by** chip opens a bottom sheet with Recommended / Rating / Delivery (or Pickup) time / Delivery fee. Chip label updates to reflect the active sort. Closed venues stay anchored to the bottom regardless of sort key. Sheet uses the standard `absolute inset-0 z-40 bg-black/40` + `sheetUp` keyframe pattern.
 - **Notification bell** opens a bottom sheet of cross-venue order updates pulled from `tapow.<slug>.orders.v1` for every venue in `VENUES`. `buildNotifications()` lives in [src/screens/discovery/shared.ts](src/screens/discovery/shared.ts) — last 7 days, top 12, sorted desc by `at`. Each row: venue name + colored status pill (incoming/cooking/ready/collected/rejected/cancelled) + `#shortId` + last status text + relative time. Free-text vendor messages get a 💬 avatar; system events get 🛵. Bell carries an unread badge counting active orders (incoming/cooking/ready). Tap a row → navigates to that venue.
-- **Hero category cards** (Near Me / Top Rated / Free Delivery / New on Tapow) toggle a single `heroFilter` exclusively. Active card gets a colored ring matching its accent. Filters: Top Rated `rating ≥ 4.7`, Free Delivery matches venues whose `hasOffer.label` contains "free delivery" (or `deliveryFee === 0`), New on Tapow `ratingCount < 250`, Near Me doesn't filter — it biases the sort toward fastest first regardless of the active sort key.
+- **Hero category cards** *(removed in the Discovery UX-density pass — see below)*. Originally: four big colored cards (Near Me / Top Rated / Free Delivery / New on Tapow) below the cuisine tiles, each toggling a single `heroFilter`. Took ~130px of body real estate for what turned out to be regular boolean filters. Functional load migrated: Top Rated and Free Delivery became chips in the filter row; Near Me (a sort proxy, not a filter) folded into the existing "Delivery time" / "Pickup time" sort option; New on Tapow (`ratingCount < 250`) was dropped — low signal for venues we control onboarding for.
 
 Layered with existing chips (cuisine tile / Under 30 min / Offers): all filters AND together. The list heading swaps to reflect the active filter ("Indian restaurants" / "Top rated" / etc.). Notifications sheet re-reads localStorage every time it's opened, so a freshly-placed order shows up without a refresh.
 
+### Discovery UX-density pass
+
+Tightening pass after seeing the discovery screen side-by-side with Uber Eats. Same surface area, ~2x the affordance density in the chrome, one extra restaurant card above the fold.
+
+Cuts shipped:
+- **Single-line location pill**. Was: stacked "Deliver now" small-label + "Home ⌄" big-label (~50px). Now: `📍 Home ⌄` on one row (~30px). "Deliver now" was redundant once delivery is the implicit default.
+- **Delivery/Pickup compressed into one dropdown chip** at the start of the filter chip row (replaced an earlier interim of two side-by-side chips, which itself replaced the original standalone ~50px row). Tapping it opens a `ModeSheet` bottom sheet (mirrors `SortSheet`) — Delivery / Pickup with checkmark on active. The chip dark-styles when Pickup is on so the non-default mode reads at a glance.
+- **Hero category cards row dropped entirely** (above bullet). Saves ~130px below the cuisine tiles, reclaimed for an extra restaurant card above the fold.
+- **"Under RM3.00" and "Filters" chips dropped** — neither was wired, both were visual placeholders.
+- `applyHeroFilter` / `heroFilter` state / `HeroFilterId` type / `HERO_CATEGORIES` constant / `HeroCategoryRow` component all removed. `sortVenues` lost its `hero === "near-me"` speed-bias branch since the same effect is now reachable via the explicit "Delivery time" sort.
+
+Restaurant card redesign (Grab-style, denser):
+- Horizontal layout — 112px (`w-28`) thumbnail on left, three-row text column on right (name / `⭐ rating (count) · $$ · cuisine` / `ETA · fee`). Hairline divider between cards (`border-b border-gray-100`) instead of a 16px gap. Card height ~136px vs the old ~280px full-bleed-hero card. Target density: 4-5 cards above the fold w/ Order Again rail, 5-6 without.
+- Offer pill shrinks to a small corner badge on the thumbnail (top-left, 10px font). Closed state: 35% black overlay + tiny "CLOSED" label. Both preserve information density without taking dedicated rows.
+- Per-card **kebab** at top-right opens `CardActionSheet` — two actions: **Add to / Remove from favourites** (filled heart, rose when favourited) and **Hide this restaurant** (eye-slash icon, "You won't see it for 30 days" subcopy). The full hit-area for the card is a separate `<button>` from the kebab so taps don't collide.
+
+Favourites + hide system:
+- Both backed by `localStorage` via `readFavourites` / `writeFavourites` / `readHidden` / `writeHidden` in [src/screens/discovery/shared.ts](src/screens/discovery/shared.ts). Favourites: `Set<slug>`. Hidden: `Record<slug, timestamp>` with 30-day auto-prune on every read.
+- Favourites is a **scope modifier**, not a separate destination. The ❤ button in the top bar toggles `favouritesOnly`; the existing view stays — chrome, cuisine tiles, chip row, all of it — and the venue list narrows. Heading composes: "Favourites" alone, "Italian favourites" when stacked with a cuisine, "Top rated favourites" when stacked with the Top rated chip.
+- Hidden venues filter out of the list immediately and don't return until 30 days elapse. Stored as `{ slug: timestamp }` so the timer is real, not just label copy. Hidden venues are still searchable on a venue's own URL (`/v/<slug>`) — discovery is the only surface that respects the hide.
+- A small filled-rose heart appears at bottom-left of the thumbnail when a venue is favourited (purely an indicator; the kebab is the entry point for toggling).
+- `SearchOverlay` accepts `scopedSlugs` + `scopeLabel` props — when the favourites toggle is on, the overlay restricts the searchable pool to the favourited slugs and re-labels the placeholder to "Search your favourites." The chains case (3 locations of the same brand, 1 favourited) is automatically correct since each location is its own venue slug.
+- Empty state when `favouritesOnly && favouritesCount === 0`: "No favourites yet — tap ⋯ on any restaurant and choose 'Add to favourites' to save it here."
+
+**KIV for a future pass:**
+- **Carousel-section hero cards** — if the hero cards get reinstated, do them as carousel-section heroes (Uber Eats' "Featured on Tapow" / "Places you might like" pattern) rather than the prior four-card filter strip. That pattern adds variety + merchandising load without competing with the chip row for the same job. Don't reintroduce the old shape — Top Rated and Free Delivery are already covered by chips, and a filter strip and a chip row doing the same thing is the exact density regression we just fixed.
+- **Chains / multi-location.** When a brand has N locations on Tapow, the favourites filter already does the right thing (slug-based; only the favourited location appears). The search-within-favourites scoping is the first piece of "filter within a long list." If the favourites list ever gets long enough that a dedicated in-place search input would help (rather than the bottom-rail overlay), wire one above the heading when `favouritesOnly && favouritesCount >= ~10`. Until then the overlay scope is enough.
+- **Surface "manage hidden venues"** — there's no UI today to un-hide a venue ahead of the 30-day timer. If users complain we hide too aggressively, add a row to Settings or a chip in the empty state to clear all hides.
+
+Inline "narrow further" search:
+- When any filter is active (cuisine, top-rated, free-delivery, under-30, offers, favourites), an inline `InlineSearchInput` slot renders below the chip row, inside the sticky region. Placeholder reads "Narrow N restaurants…" with the live filtered count. Typing substring-matches against `venue.name`, `venue.cuisine`, `venue.tagline` on the already-filtered set, narrowing the visible list further without leaving the view.
+- Distinct from the bottom-rail search button — the inline input is the lightweight "I already filtered, now type to refine" tool, while the bottom rail still opens the full `SearchOverlay` for cross-venue dish/menu search.
+- `inlineSearch` state auto-clears via effect when `anyFilterActive` flips false, so a hidden constraint can't persist when the input itself unmounts.
+
+Order Again rail auto-hides:
+- The cross-venue Order Again rail above the restaurant list hides whenever `anyFilterActive` is true. Rationale: the rail is a global "your past orders, regardless of filter" surface; showing it under a filtered list visually contradicts the user's filter intent. `pickupMode` does NOT count toward `anyFilterActive` — past orders exist regardless of delivery/pickup mode.
+
+What did NOT change in this pass: cuisine tile row stays in the scroll body (sticky promotion was considered in proposal C; deferred until we see whether always-visible cuisine tiles are actually missed on scroll); bottom rail unchanged; sort/notifications sheets unchanged.
+
+### Menu UX-density pass + dish favourites
+
+After the discovery pass, the menu screen got the same treatment plus a new dish-favourites system.
+
+Cuts shipped on the menu list:
+- **Item row image bumped 80px → 112px** (`w-20` → `w-28`), `rounded-lg` → `rounded-xl`, to match the discovery card thumbnail. Same aspect, same chrome — they read as the same visual object across screens.
+- **The `+` button dropped entirely** from item rows. The whole row was already the tap-into-detail target; the `+` glyph implied "add to cart" but actually navigated to `ItemScreen` like the rest of the row. With the heart toggle now serving as the per-row action, the `+` was redundant decoration. The dropping also reclaims the bottom-right of every thumbnail where the `+` used to sit.
+
+Dish favourites system:
+- Backed by [src/lib/dishFavourites.ts](src/lib/dishFavourites.ts) — a global `Set<itemId>` persisted in `localStorage` under `tapow.dish-favourites.v1`. Item IDs are venue-prefixed (`ba-fish-sandwich`, `gj-beef-single`, …) so one global set scopes per venue without collisions. Helpers: `readDishFavourites`, `writeDishFavourites`, `toggleDishFavourite`, `isDishFavourite`.
+- **MenuScreen top bar**: heart icon next to the search icon. Tap → toggles `favouritesOnly` — the menu narrows to favourited items in this venue only. Categories with 0 favourited items hide from the sticky strip, the in-list section list, and the `CategoryDrawer`. `searchResults` scopes to whatever the menu is currently filtered to (favourites-only stays favourites-only inside search). The scroll-spy snaps `activeCat` to the first remaining category if the current active one gets filtered out. Empty state when 0 favourites in this venue: `EmptyFavouritesState` — small rose heart in a canvas circle + "No favourite dishes yet" + "Tap the heart on any dish — it'll show up here for instant access next time."
+- **ItemScreen top-right**: heart toggle mirroring the close-button chrome (36px white circle, shadow, top-4 right-4). Fills rose when saved; outline + ink when not.
+- **Per-row heart on ItemRow**: small 28px heart at `top-3 right-1.5` regardless of whether the item has an image — the y-position aligns to the title line. For image items the heart sits on the image's top-right with a white pill + shadow; for text-only items it floats at the row's top-right with no background. Tap stops propagation so toggling favourite never accidentally navigates into the detail.
+- Toggling from MenuScreen, ItemScreen, or per-row updates the same `localStorage` set; in-screen state stays consistent via `setDishFavourites(toggleDishFavourite(itemId))`.
+
+Parallel to the discovery venue-favourites system — same mental model (scope toggle, not a destination), same heart glyph, same rose fill — but a separate code path because the use cases (saving a venue vs saving a dish) are independent.
+
+**KIV for a future pass:**
+- **Cross-venue "your dishes" surface.** Right now dish favourites are only reachable inside the venue's own menu. A global "Your saved dishes" view across venues (Profile tab on the bottom rail?) would let users hop from "I'm hungry" → "I want my Fish Sandwich" → straight into Bar Abong's cart. Bundle with the cross-venue customer-identity work (the Profile icon is currently unwired).
+- **Dish-favourites ↔ review system.** When per-item reviews land (Pass 4 future-note #1), the heart and the rating star should share the same per-item identity model — favourite + rate from the same surface.
+
 ### Out of scope for this pass (and why)
 
-- **Real menus for most venues** — Kohinoor, Goojiburg, and Alu-Alu Kitchen are populated; the other 9 placeholders are unblocked by the modifier-group schema but still need their data transcribed. Those are next-pass content work, not architecture.
+- **Real menus for most venues** — Bar Abong, FowlBoys, Kohinoor, Goojiburg, and Alu-Alu Kitchen are populated; the remaining 9 placeholders are unblocked by the modifier-group schema but still need their data transcribed. Those are next-pass content work, not architecture.
 - **SPA navigation between discovery and venue** — full-page reload is simpler and the WhatsApp in-app browser handles it fine.
 - **A real cart icon badge on the bottom rail** — discovery has no global cart; cart is scoped per venue. Showing a count would require summing across venue carts, which doesn't match the data model.
-- **Under RM3.00 chip / Filters chip / hero "Free Delivery" today-only copy** — the two named chips are still visual; the hero subtitle "Today only" is decorative since we don't have a time-bounded promo on the platform yet.
-- **Geo / distance** — Near Me is a speed proxy, not a real distance sort. No coordinates on venues.
+- **Geo / distance** — no real distance sort yet. Most venues still have no coordinates (Bar Abong is the only one with lat/lng populated; backfill is a later pass). The dropped Near Me hero card was a speed proxy, not a real distance sort.
 
 ### Next pass
 
-Content: transcribe menus for the remaining 9 venues (Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy, Biru Biru, El Centro, Octoverse, Noko Noko). The schema now supports the shapes that were blocked before (cocktails with spirit/mixer/ice picks, coffee with size/milk/strength, indian thalis with spice levels). Each venue is a new file in [src/data/menus/](src/data/menus/) plus a `menu:` wire-up in [src/data/venues/index.ts](src/data/venues/index.ts). Alu-Alu Kitchen ([src/data/menus/alu-alu-kitchen.ts](src/data/menus/alu-alu-kitchen.ts)) is the heaviest reference shape — its matrix-priced sections, Small/Medium size group helper, and per-kg / seasonal handling are all reusable patterns for the rest.
+Content: transcribe menus for the remaining 9 venues (Welcome Seafood, Upperstar, Suang Tian, Chilli Vanilla, Little Italy, Biru Biru, El Centro, Octoverse, Noko Noko). The schema now supports the shapes that were blocked before (cocktails with spirit/mixer/ice picks, coffee with size/milk/strength, indian thalis with spice levels). Each venue is a new file in [src/data/menus/](src/data/menus/) plus a `menu:` wire-up in [src/data/venues/index.ts](src/data/venues/index.ts). Alu-Alu Kitchen ([src/data/menus/alu-alu-kitchen.ts](src/data/menus/alu-alu-kitchen.ts)) is the heaviest reference shape — its matrix-priced sections, Small/Medium size group helper, and per-kg / seasonal handling are all reusable patterns for the rest. Bar Abong ([src/data/menus/bar-abong.ts](src/data/menus/bar-abong.ts)) is the reference for ungrouped sections (empty `name: ""`), `containsAlcohol`, and `MenuCategory.note`.
 
 Architecture-wise, the remaining gap is customer identity (cross-venue profile / order history — the discovery bottom-rail Profile icon is still unwired).
 
